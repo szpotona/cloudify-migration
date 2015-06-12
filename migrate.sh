@@ -91,25 +91,41 @@ function create_deployments {
     ) 4>&1
 }
 
-function install_agents {
+#  $1 - either install_agents or uninstall_agents
+function prepare_agents_script {
     mkdir -p /tmp/agents_installer
-    cp $BASE_DIR/install_agents/* /tmp/agents_installer
+    cp $BASE_DIR/$1/* /tmp/agents_installer
     cp $BASE_DIR/common_agents/* /tmp/agents_installer
     cd /tmp/agents_installer
     tar -cvf /tmp/script.tar.gz *
     cd /tmp
     rm -rf /tmp/agents_installer
+}
+
+function install_agents {
+    prepare_agents_script install_agents
     activate_new_cli
     python $BASE_DIR/scp.py '/tmp/script.tar.gz' '/tmp' upload
     python $BASE_DIR/scp.py $BASE_DIR/install_agents/run_on_docker.sh /tmp upload
     cfy ssh -c '/tmp/run_on_docker.sh /tmp/script.tar.gz'
 }
 
+
+function uninstall_agents {
+    prepare_agents_script uninstall_agents
+    activate_old_cli
+    python $BASE_DIR/scp.py /tmp/script.tar.gz /tmp upload
+    python $BASE_DIR/scp.py $BASE_DIR/uninstall_agents/run_on_manager.sh /tmp upload 
+    cfy ssh -c '/tmp/run_on_manager.sh /tmp/script.tar.gz'
+}
+
+
 download_all_blueprints
 untar_all_blueprints
 update_and_upload_all_blueprints
 create_deployments
 
+#uninstall_agents
 #install_agents
 
 #rm -fr $BLUEPRINTS_DIR
