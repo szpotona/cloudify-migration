@@ -51,7 +51,7 @@ function untar_all_blueprints {
         extracted_dir="${blueprint_tar_gz%%.*}"
         mkdir $extracted_dir
         tar xzf $blueprint_tar_gz -C $extracted_dir --strip-components 1
-        Grm $blueprint_tar_gz
+        rm $blueprint_tar_gz
     done
 }
 
@@ -125,7 +125,7 @@ untar_all_blueprints
 update_and_upload_all_blueprints
 create_deployments
 
-#uninstall_agents
-#install_agents
+uninstall_agents
+install_agents
 
 #rm -fr $BLUEPRINTS_DIR
