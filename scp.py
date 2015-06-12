@@ -30,7 +30,7 @@ def scp(local_path, path_on_manager, to_manager):
         path_on_manager
     )
     command = [scp_path, '-i', os.path.expanduser(get_management_key())]
-    if to_manager == 'upload':
+    if to_manager:
         command += [local_path, management_path]
     else:
         command += [management_path, local_path]
@@ -38,4 +38,4 @@ def scp(local_path, path_on_manager, to_manager):
 
 
 if __name__ == "__main__":
-    scp(sys.argv[1], sys.argv[2], sys.argv[3])
+    scp(sys.argv[1], sys.argv[2], sys.argv[3] == 'upload')
