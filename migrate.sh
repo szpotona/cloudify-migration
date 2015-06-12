@@ -51,7 +51,7 @@ function untar_all_blueprints {
         extracted_dir="${blueprint_tar_gz%%.*}"
         mkdir $extracted_dir
         tar xzf $blueprint_tar_gz -C $extracted_dir --strip-components 1
-        rm $blueprint_tar_gz
+        Grm $blueprint_tar_gz
     done
 }
 
@@ -91,11 +91,21 @@ function create_deployments {
     ) 4>&1
 }
 
+function install_agents {
+    cd $BASE_DIR/install_agents
+    tar -cvf /tmp/script.tar.gz *
+    activate_new_cli
+    python $BASE_DIR/scp.py '/tmp/script.tar.gz' '/tmp' upload
+    python $BASE_DIR/scp.py $BASE_DIR/install_agents/run_on_docker.sh /tmp upload
+    cfy ssh -c '/tmp/run_on_docker.sh'
+}
+
 
 download_all_blueprints
 untar_all_blueprints
 update_and_upload_all_blueprints
 create_deployments
 
+#install_agents
 
 #rm -fr $BLUEPRINTS_DIR
