@@ -18,11 +18,11 @@ add_template = "curl -s -XPUT 'http://localhost:9200/cloudify_storage/node_insta
 
 if deployments:
     for dep in deployments:
-        #new_dep = client.deployments.create(
-        #    dep['blueprint_id'],
-        #    dep['id'],
-        #    dep['inputs']
-        #)
+        new_dep = client.deployments.create(
+            dep['blueprint_id'],
+            dep['id'],
+            dep['inputs']
+        )
 
         nodes = json.loads(open(host_magic_dir + dep['id'], 'r').read())
         
