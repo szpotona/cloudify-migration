@@ -92,14 +92,18 @@ function create_deployments {
 }
 
 function install_agents {
-    cd $BASE_DIR/install_agents
+    mkdir -p /tmp/agents_installer
+    cp $BASE_DIR/install_agents/* /tmp/agents_installer
+    cp $BASE_DIR/common_agents/* /tmp/agents_installer
+    cd /tmp/agents_installer
     tar -cvf /tmp/script.tar.gz *
+    cd /tmp
+    rm -rf /tmp/agents_installer
     activate_new_cli
     python $BASE_DIR/scp.py '/tmp/script.tar.gz' '/tmp' upload
     python $BASE_DIR/scp.py $BASE_DIR/install_agents/run_on_docker.sh /tmp upload
     cfy ssh -c '/tmp/run_on_docker.sh /tmp/script.tar.gz'
 }
-
 
 download_all_blueprints
 untar_all_blueprints

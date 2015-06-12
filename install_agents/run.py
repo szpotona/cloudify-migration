@@ -9,9 +9,8 @@ import os
 sm = instance()
 
 for deployment in sm.deployments_list():
-    os.system('/bin/bash replace_cloudify_software.sh {} {} {}'.format(
+    os.system('/bin/bash install_agents.sh {} {}'.format(
           deployment.blueprint_id, 
-          deployment.id, 
-          'migration_install'))
+          deployment.id))
    
    
