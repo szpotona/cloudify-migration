@@ -97,7 +97,7 @@ function install_agents {
     activate_new_cli
     python $BASE_DIR/scp.py '/tmp/script.tar.gz' '/tmp' upload
     python $BASE_DIR/scp.py $BASE_DIR/install_agents/run_on_docker.sh /tmp upload
-    cfy ssh -c '/tmp/run_on_docker.sh'
+    cfy ssh -c '/tmp/run_on_docker.sh /tmp/script.tar.gz'
 }
 
 
