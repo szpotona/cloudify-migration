@@ -14,7 +14,7 @@ magic_file = "cloudify_migration_data_file_3f53t9"
 magic_path = "/tmp/" + magic_file
 host_magic_dir = "/tmp/cloudify_migration_data_2g25qt4/"
 
-dump_template = "curl -s -XGET 'http://localhost:9200/cloudify_storage/node_instance/_search?size=10000&q=deployment_id:{id}' > {tempfile}"
+dump_template = "curl -s -XGET 'http://localhost:9200/cloudify_storage/node_instance,execution/_search?size=10000&q=deployment_id:{id}' > {tempfile}"
 
 if not os.path.exists(host_magic_dir):
     os.mkdir(host_magic_dir)
