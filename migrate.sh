@@ -2,11 +2,14 @@
 
 set -e
 
-OLD_CLI_PYTHON_VIRTENV=$1  # Directory of the virtualenv which is utilized by Cloudify CLI to manage the old manager
-OLD_CLI_DIR=$2             # Location of the .cloudify directory initialized by Cloudify CLI to manage the old manager
-NEW_CLI_PYTHON_VIRTENV=$3  # Directory of the virtualenv which is utilized by Cloudify CLI to manage the new manager
-NEW_CLI_DIR=$4             # Location of the .cloudify directory initialized by Cloudify CLI to manage the new manager
+function absolute_path {
+    echo $(dirname $(readlink -e $1))/$(basename $1)
+}
 
+OLD_CLI_PYTHON_VIRTENV=$(absolute_path $1)  # Directory of the virtualenv which is utilized by Cloudify CLI to manage the old manager
+OLD_CLI_DIR=$(absolute_path $2)             # Location of the .cloudify directory initialized by Cloudify CLI to manage the old manager
+NEW_CLI_PYTHON_VIRTENV=$(absolute_path $3)  # Directory of the virtualenv which is utilized by Cloudify CLI to manage the new manager
+NEW_CLI_DIR=$(absolute_path $4)             # Location of the .cloudify directory initialized by Cloudify CLI to manage the new manager
 
 BLUEPRINTS_DIR=$(mktemp -d /tmp/migr_blueprints_XXXX)
 BASE_DIR=$PWD
