@@ -40,6 +40,13 @@ function activate_new_cli {
     activate_cli $NEW_CLI_DIR $NEW_CLI_PYTHON_VIRTENV
 }
 
+#  Usage:
+#  upload_to_manager what where
+# To choose the manager, activate the appropriate CLI
+function upload_to_manager {
+    python $BASE_DIR/scp.py $1 $2 upload
+}
+
 function download_all_blueprints {
     activate_old_cli
     if python $BASE_DIR/download_blueprints.py $BLUEPRINTS_DIR; then
@@ -108,8 +115,8 @@ function prepare_agents_script {
 function install_agents {
     prepare_agents_script install_agents
     activate_new_cli
-    python $BASE_DIR/scp.py '/tmp/script.tar.gz' '/tmp' upload
-    python $BASE_DIR/scp.py $BASE_DIR/install_agents/run_on_docker.sh /tmp upload
+    upload_to_manager /tmp/script.tar.gz /tmp
+    upload_to_manager $BASE_DIR/install_agents/run_on_docker.sh /tmp
     cfy ssh -c '/tmp/run_on_docker.sh /tmp/script.tar.gz'
 }
 
@@ -117,8 +124,8 @@ function install_agents {
 function uninstall_agents {
     prepare_agents_script uninstall_agents
     activate_old_cli
-    python $BASE_DIR/scp.py /tmp/script.tar.gz /tmp upload
-    python $BASE_DIR/scp.py $BASE_DIR/uninstall_agents/run_on_manager.sh /tmp upload 
+    upload_to_manager /tmp/script.tar.gz /tmp
+    upload_to_manager $BASE_DIR/uninstall_agents/run_on_manager.sh /tmp
     cfy ssh -c '/tmp/run_on_manager.sh /tmp/script.tar.gz'
 }
 
