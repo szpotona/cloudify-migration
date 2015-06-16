@@ -21,7 +21,10 @@ def replace_host_software(ctx, **kwargs):
                 if sys.argv[4] == "migration_uninstall":
                     generate_tasks_fun = _host_pre_stop
                 else:
-                    generate_tasks_fun = _host_post_start
+                    def generate_tasks_fun(instance):
+                        return _host_post_start(instance) + [
+                            instance.execute_operation('cloudify.interfaces.monitoring.start')
+                        ]
                 sequence = graph.sequence()
                 sequence.add(*generate_tasks_fun(instance))
 
