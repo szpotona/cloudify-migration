@@ -5,7 +5,7 @@ if [[ $# -lt 2 ]]; then
     exit 1
 fi
 
-. /etc/default/celeryd-${2}
+. /etc/default/celeryd-${2}_workflows
 
 execution_id=$(/opt/manager/env/bin/python create_execution.py $1 $2 migration_install)
 
