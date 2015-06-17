@@ -83,9 +83,6 @@ function download_all_blueprints {
     else
         error "Downloading blueprints from the old Cloudify Manager failed.." 1
     fi
-}
-
-function untar_all_blueprints {
     for blueprint_tar_gz in $BLUEPRINTS_DIR/*.tar.gz; do
         extracted_dir="${blueprint_tar_gz%%.*}"
         mkdir $extracted_dir
@@ -168,7 +165,6 @@ function uninstall_agents {
 
 
 download_all_blueprints
-untar_all_blueprints
 update_and_upload_all_blueprints
 create_deployments
 
