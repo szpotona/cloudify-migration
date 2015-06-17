@@ -47,7 +47,7 @@ if deployments:
         with open(os.devnull, "w") as FNULL:
             del_command = del_template.format(dep['id'])
             call(["cfy", "ssh", "-c", del_command],
-                 istdout=FNULL, stderr=FNULL)
+                 stdout=FNULL, stderr=FNULL)
             for node in nodes["hits"]["hits"]:
                 source = json.dumps(node["_source"])
                 if node["_type"] == "execution":
