@@ -2,6 +2,40 @@
 
 set -e
 
+SCRIPT_NAME=$0
+
+function error {
+    echo "$1" 1>&2
+    exit $2
+}
+
+function usage {
+    echo "Usage: $SCRIPT_NAME [-bh] old_cli_venv old_cli_dir new_cli_venv new_cli_dir"
+}
+
+MODIFY_BLUEPRINTS=false
+while getopts bh opt; do
+    case $opt in
+        b)
+            MODIFY_BLUEPRINTS=true
+            ;;
+        h)
+            usage
+            exit 0
+            ;;
+        \?)
+            usage
+            error "Invalid option supplied" 2
+            ;;
+    esac
+done
+shift $((OPTIND - 1))
+
+if [[ $# != 4 ]]; then
+    usage
+    error "Wrong number of parameters" 2
+fi
+
 function absolute_path {
     echo $(dirname $(readlink -e $1))/$(basename $1)
 }
@@ -15,11 +49,6 @@ BLUEPRINTS_DIR=$(mktemp -d /tmp/migr_blueprints_XXXX)
 BASE_DIR=$PWD
 USER_YES_RESP_REGEXP="^([yY][eE][sS]|[yY])$"
 
-
-function error {
-    echo "$1" 1>&2
-    exit $2
-}
 
 function activate_cli {
     # Deactivate any virtual env that is potentially activated
@@ -66,17 +95,19 @@ function untar_all_blueprints {
 }
 
 function update_blueprint {
-    changed_blueprint=$1'.chg'
-    sed 's/1.1/1.2/g;s/3.1/3.2/g' $1 > $changed_blueprint
-    if ! diff --old-group-format=$'\e[0;31m%<\e[0m' \
-              --new-group-format=$'\e[0;32m%>\e[0m' \
-              --unchanged-group-format='' $1 $changed_blueprint; then
-        read -p "Do you accept these modifications? [y/n] " user_resp
-        if [[ $user_resp =~ $USER_YES_RESP_REGEXP ]]; then
-            mv $changed_blueprint $1
-        else
-            rm $changed_blueprint
-            read -p "Please make $1 compliant with Cloudify 3.2 on your own and press enter."
+    if $MODIFY_BLUEPRINTS; then
+        changed_blueprint=$1'.chg'
+        sed 's/1.1/1.2/g;s/3.1/3.2/g' $1 > $changed_blueprint
+        if ! diff --old-group-format=$'\e[0;31m%<\e[0m' \
+                  --new-group-format=$'\e[0;32m%>\e[0m' \
+                  --unchanged-group-format='' $1 $changed_blueprint; then
+            read -p "Do you accept these modifications? [y/n] " user_resp
+            if [[ $user_resp =~ $USER_YES_RESP_REGEXP ]]; then
+                mv $changed_blueprint $1
+            else
+                rm $changed_blueprint
+                read -p "Please make $1 compliant with Cloudify 3.2 on your own and press enter."
+            fi
         fi
     fi
 }
