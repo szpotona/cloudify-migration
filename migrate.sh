@@ -4,8 +4,6 @@ set -e
 
 . common.sh
 
-SCRIPT_NAME=$0
-
 function usage {
     echo "Usage: $SCRIPT_NAME [-bh] old_cli_venv old_cli_dir new_cli_venv new_cli_dir"
 }
@@ -33,15 +31,10 @@ if [[ $# != 4 ]]; then
     error "Wrong number of parameters" 2
 fi
 
-OLD_CLI_PYTHON_VIRTENV=$(absolute_path $1)  # Directory of the virtualenv which is utilized by Cloudify CLI to manage the old manager
-OLD_CLI_DIR=$(absolute_path $2)             # Location of the .cloudify directory initialized by Cloudify CLI to manage the old manager
-NEW_CLI_PYTHON_VIRTENV=$(absolute_path $3)  # Directory of the virtualenv which is utilized by Cloudify CLI to manage the new manager
-NEW_CLI_DIR=$(absolute_path $4)             # Location of the .cloudify directory initialized by Cloudify CLI to manage the new manager
+put_common_args_to_variables
 
 BLUEPRINTS_DIR=$(mktemp -d /tmp/migr_blueprints_XXXX)
-BASE_DIR=$PWD
 USER_YES_RESP_REGEXP="^([yY][eE][sS]|[yY])$"
-
 
 function download_all_blueprints {
     activate_old_cli
