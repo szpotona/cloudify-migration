@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# should be replaced with proper values:
+MANAGER_ENV=__MANAGER_ENV__
+OPERATION=__OPERATION__
+
+$MANAGER_ENV/bin/python run.py $MANAGER_ENV $OPERATION
+

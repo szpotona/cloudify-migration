@@ -110,5 +110,6 @@ download_all_blueprints
 update_and_upload_all_blueprints
 create_deployments
 if $UPDATE_HOSTS_SOFTWARE; then
-    $BASE_DIR/migrate_agents.sh $1 $2 $3 $4
+    $BASE_DIR/migrate_agents.sh uninstall 3.1 $1 $2
+    $BASE_DIR/migrate_agents.sh install 3.2 $3 $4
 fi

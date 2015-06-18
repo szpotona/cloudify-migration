@@ -4,49 +4,74 @@ set -e
 
 . common.sh
 
-function usage {
-    echo "Usage: $SCRIPT_NAME old_cli_venv old_cli_dir new_cli_venv new_cli_dir"
-}
-
-if [[ $# != 4 ]]; then
-    usage
-    error "Wrong number of parameters" 2
-fi
-
-put_common_args_to_variables $1 $2 $3 $4
-
 function cleanup {
     rm -f /tmp/script.tar.gz
 }
 trap cleanup EXIT
 
-#  $1 - either install_agents or uninstall_agents
+function usage_exit {
+    echo "Usage: $0 (install|uninstall) (3.1|3.2) cli_venv cli_dir"
+    exit 1
+}
+
+#$1 - manager virtualenv path - it depends on version
+#$2 - operation - either migration_install or migration_uninstall
+#$3 - result script path
 function prepare_agents_script {
-    mkdir -p /tmp/agents_installer
-    cp $BASE_DIR/$1/* /tmp/agents_installer
-    cp $BASE_DIR/common_agents/* /tmp/agents_installer
-    cd /tmp/agents_installer
-    tar -cvf /tmp/script.tar.gz *
+    mkdir -p /tmp/agents_script
+    cp $BASE_DIR/common_agents/* /tmp/agents_script
+    cd /tmp/agents_script
+    mv run.sh.template run.sh
+    sed -i s@__MANAGER_ENV__@$1@ run.sh
+    sed -i s@__OPERATION__@$2@ run.sh
+    tar -cvf $3 *
     cd /tmp
-    rm -rf /tmp/agents_installer
+    rm -rf /tmp/agents_script
 }
 
-function install_agents {
-    prepare_agents_script install_agents
-    activate_new_cli
-    upload_to_manager /tmp/script.tar.gz /tmp
-    upload_to_manager $BASE_DIR/install_agents/run_on_docker.sh /tmp
-    cfy ssh -c '/tmp/run_on_docker.sh /tmp/script.tar.gz'
+#$1 - script path
+#$2 - runner name
+function run_agents_operation {
+    upload_to_manager $1 /tmp/script.tar.gz
+    upload_to_manager $BASE_DIR/runners/$2 /tmp/runner.sh
+    cfy ssh -c '/tmp/runner.sh /tmp/script.tar.gz'
 }
 
-function uninstall_agents {
-    prepare_agents_script uninstall_agents
-    activate_old_cli
-    upload_to_manager /tmp/script.tar.gz /tmp
-    upload_to_manager $BASE_DIR/uninstall_agents/run_on_manager.sh /tmp
-    cfy ssh -c '/tmp/run_on_manager.sh /tmp/script.tar.gz'
-}
+if [[ $# != 4 ]]; then
+    usage_exit
+fi
 
-uninstall_agents
-install_agents
+case $1 in
+    install)
+        OPERATION=migration_install
+        ;;
+    uninstall)
+        OPERATION=migration_uninstall
+        ;;
+    *)
+        usage_exit
+        ;;
+esac
+
+case $2 in
+    3.1)
+        RUNNER=run_on_manager.sh
+        MANAGER_VENV=/opt/manager
+        ;;
+    3.2)
+        RUNNER=run_on_docker.sh
+        MANAGER_VENV=/opt/manager/env
+        ;;
+    *)
+        usage_exit
+        ;;
+esac
+
+VENV_PATH=`absolute_path $3`
+CLOUDIFY_PATH=`absolute_path $4`
+
+prepare_agents_script $MANAGER_VENV $OPERATION /tmp/script.tar.gz
+activate_cli $CLOUDIFY_PATH $VENV_PATH
+run_agents_operation /tmp/script.tar.gz $RUNNER
+
 
