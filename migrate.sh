@@ -82,7 +82,7 @@ function update_and_upload_all_blueprints {
         potential_bpnts=( $blueprint_dir/*.yaml )
         if [ ${#potential_bpnts[@]} -eq 1 ]; then # There is only one yaml file - our blueprint
             blueprint=${potential_bpnts[0]}
-        else                                     # There are more files than can possibly be a blueprint
+        else                                      # There are more files than can possibly be a blueprint
             for potential_bpnt in "${potential_bpnts[@]}"; do
                 read -p "Is $potential_bpnt a blueprint you want to migrate? [y/n] " user_resp
                 if [[ $user_resp =~ $USER_YES_RESP_REGEXP ]]; then
@@ -92,7 +92,9 @@ function update_and_upload_all_blueprints {
             done
         fi
         update_blueprint $blueprint
-        cfy blueprints upload -p $blueprint -b $(basename $blueprint_dir)
+        while ! cfy blueprints upload -p $blueprint -b $(basename $blueprint_dir); do
+            read -p "Please make sure that blueprint $blueprint is valid and press enter."
+        done
     done
 }
 
