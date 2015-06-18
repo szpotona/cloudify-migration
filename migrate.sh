@@ -36,6 +36,11 @@ put_common_args_to_variables
 BLUEPRINTS_DIR=$(mktemp -d /tmp/migr_blueprints_XXXX)
 USER_YES_RESP_REGEXP="^([yY][eE][sS]|[yY])$"
 
+function cleanup {
+    rm -fr $BLUEPRINTS_DIR
+}
+trap cleanup EXIT
+
 function download_all_blueprints {
     activate_old_cli
     if python $BASE_DIR/download_blueprints.py $BLUEPRINTS_DIR; then
@@ -100,5 +105,3 @@ function create_deployments {
 download_all_blueprints
 update_and_upload_all_blueprints
 create_deployments
-
-#rm -fr $BLUEPRINTS_DIR

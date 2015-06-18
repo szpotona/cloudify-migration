@@ -15,6 +15,11 @@ fi
 
 put_common_args_to_variables
 
+function cleanup {
+    rm -f /tmp/script.tar.gz
+}
+trap cleanup EXIT
+
 #  $1 - either install_agents or uninstall_agents
 function prepare_agents_script {
     mkdir -p /tmp/agents_installer
