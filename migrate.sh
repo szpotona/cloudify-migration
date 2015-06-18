@@ -9,7 +9,8 @@ function usage {
 }
 
 MODIFY_BLUEPRINTS=false
-while getopts bh opt; do
+UPDATE_HOSTS_SOFTWARE=false
+while getopts bah opt; do
     case $opt in
         b)
             MODIFY_BLUEPRINTS=true
@@ -17,6 +18,9 @@ while getopts bh opt; do
         h)
             usage
             exit 0
+            ;;
+        a)
+            UPDATE_HOSTS_SOFTWARE=true
             ;;
         \?)
             usage
@@ -105,3 +109,6 @@ function create_deployments {
 download_all_blueprints
 update_and_upload_all_blueprints
 create_deployments
+if $UPDATE_HOSTS_SOFTWARE; then
+    $BASE_DIR/migrate_agents.sh $1 $2 $3 $4
+fi
