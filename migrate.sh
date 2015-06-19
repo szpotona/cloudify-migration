@@ -102,7 +102,7 @@ function update_and_upload_all_blueprints {
 }
 
 function create_deployments {
-    (activate_old_cli; python $BASE_DIR/retrieve_deployments.py 3>&1 1>&4 | \
+    (activate_old_cli; python $BASE_DIR/retrieve_deployments.py $BASE_DIR/common_elasticsearch/dump_elasticsearch.py 3>&1 1>&4 | \
         (activate_new_cli; python $BASE_DIR/create_deployments.py)
     ) 4>&1
 }
