@@ -4,11 +4,11 @@ OLD_MAGIC_PATH="/tmp/cloudify_migration_data_metrics_53hot.tar.gz"
 HOST_FILE="cloudify_migration_data_metrics_gf35.tar.gz"
 HOST_MAGIC_PATH="/tmp/$HOST_FILE"
 
-. common.sh
+BASE_DIR=$(dirname $(readlink -e $0))
+. $BASE_DIR/common.sh
 
 function usage {
-    local sn=`basename $0`
-    echo "Usage: $sn old_cli_venv old_cli_dir new_cli_venv new_cli_dir"
+    echo "Usage: $SCRIPT_NAME old_cli_venv old_cli_dir new_cli_venv new_cli_dir"
 }
 
 if [[ $# != 4 ]]; then
@@ -38,5 +38,4 @@ function import_metrics {
 
 export_metrics
 import_metrics
-
 
