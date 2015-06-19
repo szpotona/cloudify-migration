@@ -6,7 +6,6 @@
 #   NEW_CLI_PYTHON_VIRTENV
 #   NEW_CLI_DIR
 
-BASE_DIR=$PWD
 SCRIPT_NAME=$0
 
 function put_common_args_to_variables {

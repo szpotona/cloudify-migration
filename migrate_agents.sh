@@ -2,7 +2,8 @@
 
 set -e
 
-. common.sh
+BASE_DIR=$(dirname $(readlink -e $0))
+. $BASE_DIR/common.sh
 
 function cleanup {
     rm -f /tmp/script.tar.gz

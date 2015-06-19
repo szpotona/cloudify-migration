@@ -2,7 +2,8 @@
 
 set -e
 
-. common.sh
+BASE_DIR=$(dirname $(readlink -e $0))
+. $BASE_DIR/common.sh
 
 function usage {
     echo "Usage: $SCRIPT_NAME [-bh] old_cli_venv old_cli_dir new_cli_venv new_cli_dir"
