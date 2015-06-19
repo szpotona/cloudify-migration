@@ -111,6 +111,6 @@ download_all_blueprints
 update_and_upload_all_blueprints
 create_deployments
 if $UPDATE_HOSTS_SOFTWARE; then
-    $BASE_DIR/migrate_agents.sh uninstall 3.1 $1 $2
-    $BASE_DIR/migrate_agents.sh install 3.2 $3 $4
+    $BASE_DIR/migrate_agents.sh uninstall 3.1 $OLD_CLI_PYTHON_VIRTENV $OLD_CLI_DIR
+    $BASE_DIR/migrate_agents.sh install 3.2 $NEW_CLI_PYTHON_VIRTENV $NEW_CLI_DIR
 fi

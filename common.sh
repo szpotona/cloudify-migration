@@ -5,6 +5,10 @@
 #   OLD_CLI_DIR
 #   NEW_CLI_PYTHON_VIRTENV
 #   NEW_CLI_DIR
+#
+# Recommended way of sourcing this script:
+# BASE_DIR=$(dirname $(readlink -e $0))
+# . $BASE_DIR/common.sh
 
 SCRIPT_NAME=$0
 

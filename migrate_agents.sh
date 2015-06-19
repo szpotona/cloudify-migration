@@ -11,8 +11,7 @@ function cleanup {
 trap cleanup EXIT
 
 function usage_exit {
-    echo "Usage: $0 (install|uninstall) (3.1|3.2) cli_venv cli_dir"
-    exit 1
+    error "Usage: $SCRIPT_NAME (install|uninstall) (3.1|3.2) cli_venv cli_dir" 1
 }
 
 #$1 - manager virtualenv path - it depends on version
@@ -60,11 +59,9 @@ case $2 in
         ;;
 esac
 
-VENV_PATH=`absolute_path $3`
-CLOUDIFY_PATH=`absolute_path $4`
+VENV_PATH=$(absolute_path $3)
+CLOUDIFY_PATH=$(absolute_path $4)
 
 prepare_agents_script $MANAGER_VENV $OPERATION /tmp/script.tar.gz
 activate_cli $CLOUDIFY_PATH $VENV_PATH
 run_operation /tmp/script.tar.gz $RUNNER
-
-
