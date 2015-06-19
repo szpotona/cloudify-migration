@@ -24,7 +24,7 @@ function prepare_agents_script {
     mv run.sh.template run.sh
     sed -i s@__MANAGER_ENV__@$1@ run.sh
     sed -i s@__OPERATION__@$2@ run.sh
-    tar -cvf $3 *
+    tar -cf $3 *
     cd /tmp
     rm -rf /tmp/agents_script
 }
@@ -62,6 +62,10 @@ esac
 VENV_PATH=$(absolute_path $3)
 CLOUDIFY_PATH=$(absolute_path $4)
 
+echo "Preparing operation script"
 prepare_agents_script $MANAGER_VENV $OPERATION /tmp/script.tar.gz
+echo "Operation script prepared, running operation $OPERATION"
 activate_cli $CLOUDIFY_PATH $VENV_PATH
 run_operation /tmp/script.tar.gz $RUNNER
+echo "Operation $OPERATION completed"
+

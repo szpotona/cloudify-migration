@@ -1,5 +1,5 @@
 
-set -eax
+set -e
 if [[ $# -lt 4 ]]; then
     echo "Usage: $0 blueprint_id deployment_id manager_env operation"
     exit 1

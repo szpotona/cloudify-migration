@@ -1,5 +1,5 @@
 #!/bin/bash
-set -eax
+set -ea
 
 
 mkdir -p /tmp/script
