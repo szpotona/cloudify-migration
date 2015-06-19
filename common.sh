@@ -51,8 +51,23 @@ function activate_new_cli {
     activate_cli $NEW_CLI_DIR $NEW_CLI_PYTHON_VIRTENV
 }
 
+# Usage:  download_from_manager where what
+# To choose the manager, activate the appropriate CLI
+function download_from_manager {
+    python $BASE_DIR/scp.py $1 $2 download
+}
+
 # Usage:  upload_to_manager what where
 # To choose the manager, activate the appropriate CLI
 function upload_to_manager {
     python $BASE_DIR/scp.py $1 $2 upload
 }
+
+#$1 - script path
+#$2 - runner name
+function run_operation {
+    upload_to_manager $1 /tmp/script.tar.gz
+    upload_to_manager $BASE_DIR/runners/$2 /tmp/runner.sh
+    cfy ssh -c '/tmp/runner.sh /tmp/script.tar.gz'
+}
+

@@ -29,14 +29,6 @@ function prepare_agents_script {
     rm -rf /tmp/agents_script
 }
 
-#$1 - script path
-#$2 - runner name
-function run_agents_operation {
-    upload_to_manager $1 /tmp/script.tar.gz
-    upload_to_manager $BASE_DIR/runners/$2 /tmp/runner.sh
-    cfy ssh -c '/tmp/runner.sh /tmp/script.tar.gz'
-}
-
 if [[ $# != 4 ]]; then
     usage_exit
 fi
@@ -72,6 +64,6 @@ CLOUDIFY_PATH=`absolute_path $4`
 
 prepare_agents_script $MANAGER_VENV $OPERATION /tmp/script.tar.gz
 activate_cli $CLOUDIFY_PATH $VENV_PATH
-run_agents_operation /tmp/script.tar.gz $RUNNER
+run_operation /tmp/script.tar.gz $RUNNER
 
 
