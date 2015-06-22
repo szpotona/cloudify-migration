@@ -2,11 +2,16 @@
 
 This repository contains `migrate.sh` script and its utilities/tools that ease the process of Cloudify's live migration from version 3.1 to version 3.2. Migrations between other versions might be supported in the future.
 
+###Prerequisites:###
 The script's assumptions are that the new 3.2 manager is operational and that we have two environments that can be used to manage our Cloudify managers (3.1 and 3.2).
 
-Migration consists of two phases:
+Manager 3.2 should use the same ssh keys and should be in the same network as manager 3.1. The reason is that new manager must
+be able to access host machines where running applications were deployed.
 
-- The first one involves reuploading blueprints and recreating deployments on the new manager. Adidtionally, the ElasticSearch data is transferred as well.
+
+###Migration consists of two phases:###
+
+- The first one involves reuploading blueprints and recreating deployments on the new manager. Additionally, the ElasticSearch data is transferred as well.
 - The second one handles updating the Cloudify related software on host-agents machines (Celery workers, Diamond daemon, plugins) and migrating metrics stored in the InfluxDB database (Cloudify UI's charts are based on them).
 
 To launch migration, simply run the migrate.sh script:
@@ -65,7 +70,7 @@ Parameters:
 The mandatory parameters are the same as for the `migrate.sh` script. No optional flags are specified for this script or the time being.
 
 
-Tips:
+###Tips:###
 
 Should the migration process fail, you can always recover the 3.1 manager by restoring the Cloudify software on all host-agents machines. It can be achieved by running the following command:
 
