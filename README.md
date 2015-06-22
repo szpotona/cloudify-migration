@@ -66,7 +66,7 @@ Parameters:
 
 - `migrate_metrics.sh`
 
-The mandatory parameters are the same as for the `migrate.sh` script. No optional flags are specified for this script or the time being.
+The mandatory parameters are the same as for the `migrate.sh` script. No optional flags are specified for this script for the time being.
 
 
 ###Tips:###
@@ -75,4 +75,5 @@ Should the migration process fail, you can always recover the 3.1 manager by res
 
 `./migrate_agents.sh install 3.1 old_cli_virtenv_dir old_cli_dir`
 
-Taking this action is reasonable only if the Cloudify components have really been uninstalled on host-agents machines. Otherwise the 3.1 manager should be consistent and ready to work with.
+Doing so is reasonable only if the Cloudify components have been effectively uninstalled on host-agents machines.
+Otherwise the 3.1 manager should be consistent and ready to work with without performing any recovery actions.
