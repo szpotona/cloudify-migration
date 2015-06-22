@@ -45,5 +45,5 @@ if deployments:
                 file=magic_file,
                 index="cloudify_events"
                 )], stdout=FNULL, stderr=FNULL)
-             
+
         print 'Recreated deployment %s' % (new_dep['id'],)
