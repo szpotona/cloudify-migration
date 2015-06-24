@@ -6,7 +6,17 @@ if [[ $# -lt 4 ]]; then
 fi
 
 source /etc/default/celeryd-${2}_workflows
+cp software_replacement_workflow.py ${VIRTUALENV}/lib/python2.7/site-packages
+cp ${CELERY_WORK_DIR}/celeryd-includes ${CELERY_WORK_DIR}/celeryd-includes.backup
+source ${CELERY_WORK_DIR}/celeryd-includes
+echo "INCLUDES=$INCLUDES,software_replacement_workflow" > ${CELERY_WORK_DIR}/celeryd-includes
 
-execution_id=$($3/bin/python create_execution.py $1 $2 $4)
+service celeryd-${WORKER_MODIFIER} restart
 
-${VIRTUALENV}/bin/python software_replacement_workflow.py $1 $2 $execution_id $4
+mv ${CELERY_WORK_DIR}/celeryd-includes.backup  ${CELERY_WORK_DIR}/celeryd-includes
+rm -f ${VIRTUALENV}/lib/python2.7/site-packages/software_replacement_workflow.py*
+echo "done"
+
+#execution_id=$($3/bin/python create_execution.py $1 $2 $4)
+
+#${VIRTUALENV}/bin/python software_replacement_workflow.py $1 $2 $execution_id $4
