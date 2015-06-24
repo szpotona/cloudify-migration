@@ -5,6 +5,16 @@ from cloudify.plugins.workflows import _host_post_start,\
     _host_pre_stop, _is_host_node
 from cloudify.decorators import workflow
 
+# Cloudify 3.1 uses 3.0.24 celery, where
+# Celery objects do not have 'set_default' method.
+# As a workaround, we use function from private module _state.
+# For next migrations it should be changed to use
+# public method 'set_default'.
+from celery._state import set_default_app
+from cloudify import celery
+
+set_default_app(celery.celery)
+
 
 ctx = {
     'blueprint_id': sys.argv[1],
