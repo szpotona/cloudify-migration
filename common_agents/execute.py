@@ -1,9 +1,12 @@
 from datetime import datetime
 import uuid
 import sys
+import time
 
 from manager_rest.storage_manager import instance
 from manager_rest import models
+from manager_rest.workflow_client import workflow_client
+
 
 execution_id = str(uuid.uuid4())
 
@@ -24,4 +27,19 @@ new_execution = models.Execution(
 sm = instance()
 sm.put_execution(new_execution.id, new_execution)
 
-print new_execution.id
+workflow = {
+    'operation': 'software_replacement_workflow.replace_host_software'
+}
+
+workflow_client().execute_workflow(
+    workflow_id,
+    workflow,
+    blueprint_id=blueprint_id,
+    deployment_id=deployment_id,
+    execution_id=execution_id,
+    execution_parameters={'op_name': workflow_id})
+
+status = sm.get_execution(execution_id).status
+while status not in models.Execution.END_STATES:
+   time.sleep(5)
+   status = sm.get_execution(execution_id).status

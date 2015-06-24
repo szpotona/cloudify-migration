@@ -15,8 +15,9 @@ service celeryd-${WORKER_MODIFIER} restart
 
 mv ${CELERY_WORK_DIR}/celeryd-includes.backup  ${CELERY_WORK_DIR}/celeryd-includes
 rm -f ${VIRTUALENV}/lib/python2.7/site-packages/software_replacement_workflow.py*
-echo "done"
 
-#execution_id=$($3/bin/python create_execution.py $1 $2 $4)
+$3/bin/python execute.py $1 $2 $4
 
-#${VIRTUALENV}/bin/python software_replacement_workflow.py $1 $2 $execution_id $4
+service celeryd-${WORKER_MODIFIER} restart
+
+echo 'done'
