@@ -10,7 +10,6 @@ echo "Running operation $4 for deployment $2"
 source /etc/default/celeryd-${2}_workflows
 cp software_replacement_workflow.py ${VIRTUALENV}/lib/python2.7/site-packages
 cp ${CELERY_WORK_DIR}/celeryd-includes ${CELERY_WORK_DIR}/celeryd-includes.backup
-source ${CELERY_WORK_DIR}/celeryd-includes
 echo "INCLUDES=$INCLUDES,software_replacement_workflow" > ${CELERY_WORK_DIR}/celeryd-includes
 
 service celeryd-${WORKER_MODIFIER} restart
