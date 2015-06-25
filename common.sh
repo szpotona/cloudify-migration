@@ -72,5 +72,6 @@ function run_operation {
     upload_to_manager $1 /tmp/script.tar.gz
     upload_to_manager $BASE_DIR/runners/$2 /tmp/runner.sh
     cfy ssh -c '/tmp/runner.sh /tmp/script.tar.gz'
+    cfy ssh -c 'rm -f /tmp/runner.sh /tmp/script.tar.gz'
 }
 
