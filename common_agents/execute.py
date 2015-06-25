@@ -12,7 +12,9 @@ execution_id = str(uuid.uuid4())
 
 blueprint_id = sys.argv[1]
 deployment_id = sys.argv[2]
-workflow_id = sys.argv[3]
+op_name = sys.argv[3]
+
+workflow_id = "hosts_software_" + op_name
 
 new_execution = models.Execution(
     id=execution_id,
@@ -37,7 +39,7 @@ workflow_client().execute_workflow(
     blueprint_id=blueprint_id,
     deployment_id=deployment_id,
     execution_id=execution_id,
-    execution_parameters={'op_name': workflow_id})
+    execution_parameters={'op_name': op_name})
 
 status = sm.get_execution(execution_id).status
 while status not in models.Execution.END_STATES:
