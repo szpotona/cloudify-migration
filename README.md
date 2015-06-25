@@ -11,22 +11,25 @@ Moreover, the 3.2 manager should be able to access all applications' machines, f
 ###Migration consists of two phases:###
 
 - The first one involves reuploading blueprints and recreating deployments on the new manager. Additionally, the ElasticSearch data is transferred as well.
-- The second one handles updating the Cloudify related software on host-agents machines (Celery workers, Diamond daemon, plugins) and migrating metrics stored in the InfluxDB database (Cloudify UI's charts are based on them).
+- The second one handles updating the Cloudify related software on host-agents machines (Celery workers, Diamond daemon, plugins) and optionally migrating metrics stored in the InfluxDB database (Cloudify UI's charts are based on them).
 
 To launch migration, simply run the migrate.sh script:
 
-`./migrate.sh -a -b  old_cli_virtenv_dir  old_cli_dir  new_cli_virtenv_dir  new_cli_dir`
+`./migrate.sh -b -a -m  old_cli_virtenv_dir  old_cli_dir  new_cli_virtenv_dir  new_cli_dir`
 
 
 Parameters and flags:
 
     -a
-        i.e. "migrate all" - perform full migration.
+        i.e. "agents hosts software update"
         Without this flag the second phase will not be performed. The process may be
         completed later by using `migrate_agents.sh` and `migrate_metrics.sh` scripts.
 
     -b
         With this flag set the script suggests updating versions (1.1 -> 1.2 and 3.1 -> 3.2) in each blueprint's imports by displaying a colored diff. The proposed modifications are applied upon user's permission. This option is highly recommended.
+
+    -m
+        Migrate InfluxDB metrics. For this flag to work, flag `-a` must be set as well. This option is implemented by the `migrate_metrics.sh` script.
 
     old_cli_virtenv_dir
         Python virtualenv directory used by the CLI initialized to operate the 3.1 manager.

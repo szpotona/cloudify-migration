@@ -6,22 +6,26 @@ BASE_DIR=$(dirname $(readlink -e $0))
 . $BASE_DIR/common.sh
 
 function usage {
-    echo "Usage: $SCRIPT_NAME [-bh] old_cli_venv old_cli_dir new_cli_venv new_cli_dir"
+    echo "Usage: $SCRIPT_NAME [-bamh] old_cli_venv old_cli_dir new_cli_venv new_cli_dir"
 }
 
 MODIFY_BLUEPRINTS=false
 UPDATE_HOSTS_SOFTWARE=false
-while getopts bah opt; do
+MIGRATE_INFLUXDB_DATA=false # Migrate metrics (used by graphs in the UI for example)
+while getopts bamh opt; do
     case $opt in
         b)
             MODIFY_BLUEPRINTS=true
             ;;
+        a)
+            UPDATE_HOSTS_SOFTWARE=true
+            ;;
+        m)
+            MIGRATE_INFLUXDB_DATA=true
+            ;;
         h)
             usage
             exit 0
-            ;;
-        a)
-            UPDATE_HOSTS_SOFTWARE=true
             ;;
         \?)
             usage
@@ -112,6 +116,8 @@ update_and_upload_all_blueprints
 create_deployments
 if $UPDATE_HOSTS_SOFTWARE; then
     $BASE_DIR/migrate_agents.sh uninstall 3.1 $OLD_CLI_PYTHON_VIRTENV $OLD_CLI_DIR
-    $BASE_DIR/migrate_metrics.sh $OLD_CLI_PYTHON_VIRTENV $OLD_CLI_DIR $NEW_CLI_PYTHON_VIRTENV $NEW_CLI_DIR
+    if $MIGRATE_INFLUXDB_DATA; then
+        $BASE_DIR/migrate_metrics.sh $OLD_CLI_PYTHON_VIRTENV $OLD_CLI_DIR $NEW_CLI_PYTHON_VIRTENV $NEW_CLI_DIR
+    fi
     $BASE_DIR/migrate_agents.sh install 3.2 $NEW_CLI_PYTHON_VIRTENV $NEW_CLI_DIR
 fi
