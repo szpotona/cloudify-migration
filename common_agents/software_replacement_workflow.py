@@ -26,7 +26,8 @@ def replace_host_software(ctx, op_name, **kwargs):
                                 'cloudify.interfaces.monitoring.start')
                         ]
                 else:
-                    raise NonRecoverableError('Unrecognized operation %s' % op_name)
+                    raise NonRecoverableError(
+                        'Unrecognized operation %s' % op_name)
                 sequence = graph.sequence()
                 sequence.add(*generate_tasks_fun(instance))
     graph.execute()

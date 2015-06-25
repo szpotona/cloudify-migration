@@ -43,5 +43,10 @@ workflow_client().execute_workflow(
 
 status = sm.get_execution(execution_id).status
 while status not in models.Execution.END_STATES:
-   time.sleep(5)
-   status = sm.get_execution(execution_id).status
+    time.sleep(5)
+    status = sm.get_execution(execution_id).status
+
+print '{} finished with status "{}"'.format(workflow_id, status)
+
+if status == models.Execution.FAILED:
+    sys.exit(1)
