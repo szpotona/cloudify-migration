@@ -2,10 +2,6 @@
 set -ea
 
 mkdir -p ~/script
-cp $1 ~/script/script.tar.gz
-cd ~/script
-tar -xf script.tar.gz
+tar -xf $1 -C ~/script
 sudo docker exec cfy /bin/bash -c "cd /tmp/home/script; ./run.sh"
-cd ~
 sudo rm -rf ~/script
-
