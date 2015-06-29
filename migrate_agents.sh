@@ -35,10 +35,10 @@ fi
 
 case $1 in
     install)
-        OPERATION=migration_install
+        OPERATION=install
         ;;
     uninstall)
-        OPERATION=migration_uninstall
+        OPERATION=uninstall
         ;;
     *)
         usage_exit

@@ -1,3 +1,4 @@
+#!/bin/bash
 
 set -e
 if [[ $# -lt 4 ]]; then
@@ -5,8 +6,27 @@ if [[ $# -lt 4 ]]; then
     exit 1
 fi
 
+echo "Running operation $4 for deployment $2"
 source /etc/default/celeryd-${2}_workflows
+cp software_replacement_workflow.py ${VIRTUALENV}/lib/python2.7/site-packages
+cp ${CELERY_WORK_DIR}/celeryd-includes ${CELERY_WORK_DIR}/celeryd-includes.backup
+echo "INCLUDES=$INCLUDES,software_replacement_workflow" > ${CELERY_WORK_DIR}/celeryd-includes
 
-execution_id=$($3/bin/python create_execution.py $1 $2 $4)
+service celeryd-${WORKER_MODIFIER} restart
+echo "Celery worker restarted, executing operation"
 
-${VIRTUALENV}/bin/python software_replacement_workflow.py $1 $2 $execution_id $4
+set +e
+$3/bin/python execute.py $1 $2 $4
+CODE=$?
+set -e
+
+echo "Operation finished, code $CODE"
+echo "Cleaning up environment"
+
+mv ${CELERY_WORK_DIR}/celeryd-includes.backup  ${CELERY_WORK_DIR}/celeryd-includes
+rm -f ${VIRTUALENV}/lib/python2.7/site-packages/software_replacement_workflow.py*
+
+service celeryd-${WORKER_MODIFIER} restart
+
+echo "Updating agents for deployment $2 finished with code $CODE"
+exit $CODE
