@@ -58,7 +58,7 @@ function download_all_blueprints {
         error "Downloading blueprints from the old Cloudify Manager failed.." 1
     fi
     for blueprint_tar_gz in $BLUEPRINTS_DIR/*.tar.gz; do
-        extracted_dir="${blueprint_tar_gz%%.*}"
+        extracted_dir="${blueprint_tar_gz%%.tar.gz}"
         mkdir $extracted_dir
         tar xzf $blueprint_tar_gz -C $extracted_dir --strip-components 1
         rm $blueprint_tar_gz
