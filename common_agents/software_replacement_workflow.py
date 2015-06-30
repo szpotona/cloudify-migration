@@ -21,10 +21,13 @@ def replace_host_software(ctx, op_name, **kwargs):
                     generate_tasks_fun = _host_pre_stop
                 elif op_name == "install":
                     def generate_tasks_fun(instance):
-                        return _host_post_start(instance) + [
-                            instance.execute_operation(
-                                'cloudify.interfaces.monitoring.start')
-                        ]
+                        tasks = _host_post_start(instance)
+                        for subnode in instance.get_contained_subgraph():
+                            tasks.append(
+                                subnode.execute_operation(
+                                    'cloudify.interfaces.monitoring.start')
+                            )
+                        return tasks
                 else:
                     raise NonRecoverableError(
                         'Unrecognized operation %s' % op_name)
