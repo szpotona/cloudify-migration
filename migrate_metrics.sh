@@ -16,7 +16,7 @@ if [[ $# != 4 ]]; then
     error "Wrong number of parameters" 2
 fi
 
-put_common_args_to_variables $1 $2 $3 $4
+perform_setup $1 $2 $3 $4
 
 function export_metrics {
      activate_old_cli

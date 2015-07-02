@@ -66,6 +66,7 @@ echo "Preparing operation script"
 prepare_agents_script $MANAGER_VENV $OPERATION /tmp/script.tar.gz
 echo "Operation script prepared, running operation $OPERATION"
 activate_cli $CLOUDIFY_PATH $VENV_PATH
+supplement_credentials $2
 run_operation /tmp/script.tar.gz $RUNNER
 echo "Operation $OPERATION completed"
 

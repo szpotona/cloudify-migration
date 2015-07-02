@@ -40,7 +40,7 @@ if [[ $# != 4 ]]; then
     error "Wrong number of parameters" 2
 fi
 
-put_common_args_to_variables $1 $2 $3 $4
+perform_setup $1 $2 $3 $4
 
 BLUEPRINTS_DIR=$(mktemp -d /tmp/migr_blueprints_XXXX)
 USER_YES_RESP_REGEXP="^([yY][eE][sS]|[yY])$"

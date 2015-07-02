@@ -12,7 +12,7 @@
 
 SCRIPT_NAME=$0
 
-function put_common_args_to_variables {
+function perform_setup {
     # Directory of the virtualenv which is utilized by Cloudify CLI to manage the old manager
     OLD_CLI_PYTHON_VIRTENV=$(absolute_path $1)
 
@@ -24,6 +24,8 @@ function put_common_args_to_variables {
 
     # Location of the .cloudify directory initialized by Cloudify CLI to manage the new manager
     NEW_CLI_DIR=$(absolute_path $4)
+
+    supplement_managers_credentials
 }
 
 function error {
@@ -75,3 +77,21 @@ function run_operation {
     cfy ssh -c 'rm -f /tmp/runner.sh /tmp/script.tar.gz'
 }
 
+# Takes one parameter (for example 3.1) - version of the manager whose credentials should be established
+# Appropriate CLI should be activated before calling this function
+function supplement_credentials {
+    local sentence='cfy ssh returns 0 even if it fails so we analyse captured output'
+    while [[ $(cfy ssh -c "echo $sentence") != *$sentence* ]]; do
+        python $BASE_DIR/supplement_credentials.py $1
+    done
+}
+
+# This function supplements credentials in .cloudify/context
+# It may prove to be useful in case someone utilizes "cfy use", which leaves
+# management_user and management_key set to null
+function supplement_managers_credentials {
+    activate_old_cli
+    supplement_credentials 3.1
+    activate_new_cli
+    supplement_credentials 3.2
+}
