@@ -116,6 +116,12 @@ update_and_upload_all_blueprints
 create_deployments
 if $UPDATE_HOSTS_SOFTWARE; then
     $BASE_DIR/migrate_agents.sh uninstall 3.1 $OLD_CLI_PYTHON_VIRTENV $OLD_CLI_DIR
+    if ! $BASE_DIR/print_failed_tasks.sh $OLD_CLI_PYTHON_VIRTENV $OLD_CLI_DIR; then
+        echo 'Failure during agent uninstallation process detected.'
+        echo -n 'Make sure that agents were uninstalled properly and '
+        echo 'continue migration process manually.'
+        exit 1
+    fi
     if $MIGRATE_INFLUXDB_DATA; then
         $BASE_DIR/migrate_metrics.sh $OLD_CLI_PYTHON_VIRTENV $OLD_CLI_DIR $NEW_CLI_PYTHON_VIRTENV $NEW_CLI_DIR
     fi
