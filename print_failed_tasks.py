@@ -14,9 +14,9 @@ CHECKED_WORKFLOW_ID = 'hosts_software_uninstall'
 TIME_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
 FAILED_TASK_TYPE = 'task_failed'
 FAILURE_MSG_FORMAT = ('Deployment {0}: failure detected '
-                      'in worklfow {1}, execution id {2}:')
-NO_EXECUTION_MSG_FORMAT = 'Deployment {0}: worklfow {1} was not executed.'
-OK_MSG_FORMAT = 'Deployment {0}: worklfow {1} succeeded, execution id {2}.'
+                      'in workflow {1}, execution id {2}:')
+NO_EXECUTION_MSG_FORMAT = 'Deployment {0}: workflow {1} was not executed.'
+OK_MSG_FORMAT = 'Deployment {0}: workflow {1} succeeded, execution id {2}.'
 
 RESULT_TASKS = 'tasks'
 RESULT_NO_EXECUTION = 'no_execution'
@@ -43,7 +43,7 @@ def deployment_failed_tasks(client, deployment):
     execution_events.fetch_and_process_events(
         events_handler=lambda e: events.extend(e))
     events = [e for e in events if e.get('event_type') == FAILED_TASK_TYPE]
-    return {'type': RESULT_TASKS, 'tasks': events, 'execution': last}
+    return {'type': RESULT_TASKS, 'failed_tasks': events, 'execution': last}
 
 
 def main():
@@ -56,7 +56,7 @@ def main():
     failure_detected = False
     for res in results:
         if res.get('type') == RESULT_TASKS:
-            tasks = res.get('tasks')
+            tasks = res.get('failed_tasks')
             exc = res.get('execution')
             if tasks:
                 failure_detected = True
@@ -73,7 +73,7 @@ def main():
                 logger.info(msg)
         else:
             deployment = res.get('deployment')
-            failure_detected = False
+            failure_detected = True
             logger.info(NO_EXECUTION_MSG_FORMAT.format(deployment.id,
                                                        CHECKED_WORKFLOW_ID))
     if failure_detected:
