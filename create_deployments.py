@@ -20,6 +20,10 @@ del_template = ("curl -s -XDELETE 'http://localhost:9200/"
                 "cloudify_storage/node_instance/_query?q=deployment_id:{} '")
 bulk_template = ("curl -s XPOST 'http://localhost:9200/"
                  "{index}/_bulk' --data-binary @{file}")
+update_exec_workflow_id_template = (
+    "curl -s XPOST 'http://localhost:9200/cloudify_storage/execution/"
+    "{execution_id}/_update' -d '{{\"doc\":{{\"workflow_id\":\"{w_id}\"}}}}'"
+)
 
 
 with open(os.devnull, 'w') as FNULL:
@@ -34,6 +38,14 @@ with open(os.devnull, 'w') as FNULL:
             del_command = del_template.format(dep['id'])
             call(['cfy', 'ssh', '-c', del_command],
                  stdout=FNULL, stderr=FNULL)
+
+            create_dep_execution = client.executions.list(
+                deployment_id=new_dep.id
+            )[0]
+            call(['cfy', 'ssh', '-c', update_exec_workflow_id_template.format(
+                execution_id=create_dep_execution.id,
+                w_id='create_deployment_environment_3.2'
+            )], stdout=FNULL, stderr=FNULL)
 
             print 'Recreated deployment %s' % (new_dep['id'],)
 
