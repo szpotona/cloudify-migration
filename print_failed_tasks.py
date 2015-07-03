@@ -15,7 +15,7 @@ TIME_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
 FAILED_TASK_TYPE = 'task_failed'
 FAILURE_MSG_FORMAT = ('Deployment {0}: failure detected '
                       'in workflow {1}, execution id {2}:')
-NO_EXECUTION_MSG_FORMAT = 'Deployment {0}: workflow {1} was not executed.'
+NO_EXECUTION_MSG_FORMAT = 'Deployment {0}: workflow {1} hasn\'t been executed.'
 OK_MSG_FORMAT = 'Deployment {0}: workflow {1} succeeded, execution id {2}.'
 
 RESULT_TASKS = 'tasks'
@@ -78,7 +78,9 @@ def main():
                                                        CHECKED_WORKFLOW_ID))
     if failure_detected:
         logger.info('Failure detected.')
-    return 1 if failure_detected else 0
+    return int(failure_detected)
+
 
 if __name__ == '__main__':
     sys.exit(main())
+
