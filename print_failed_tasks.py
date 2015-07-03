@@ -7,7 +7,8 @@ from cloudify_cli.execution_events_fetcher import ExecutionEventsFetcher
 from cloudify_cli.logger import (
     get_logger,
     get_events_logger,
-    configure_loggers)
+    configure_loggers
+)
 
 CHECKED_WORKFLOW_ID = 'hosts_software_uninstall'
 TIME_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
@@ -66,10 +67,10 @@ def main():
                 get_events_logger()(tasks)
                 logger.info('Total tasks failed: {0}\n'.format(len(tasks)))
             else:
-                 msg = OK_MSG_FORMAT.format(exc.deployment_id,
-                                            CHECKED_WORKFLOW_ID,
-                                            exc.id)
-                 logger.info(msg)
+                msg = OK_MSG_FORMAT.format(exc.deployment_id,
+                                           CHECKED_WORKFLOW_ID,
+                                           exc.id)
+                logger.info(msg)
         else:
             deployment = res.get('deployment')
             failure_detected = False
