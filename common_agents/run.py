@@ -17,7 +17,7 @@ def _prepare_auth_updates(auth_dict, sm):
         for node_id, agent_config in config.iteritems():
             node = sm.get_node(deployment_id, node_id)
             agent_properties = node.properties['cloudify_agent']
-            revert_actions.append((node_id, node, agent_properties))
+            revert_actions.append((node, agent_properties))
             agent_properties = agent_properties.copy()
             updated_keys = ['user', 'password']
             for key in agent_config.keys():
@@ -27,7 +27,7 @@ def _prepare_auth_updates(auth_dict, sm):
                 new_value = agent_config.get(key)
                 if new_value is not None:
                     agent_properties[key] = new_value
-            update_actions.append((node_id, node, agent_properties))
+            update_actions.append((node, agent_properties))
         result[deployment_id] = {
             'update': update_actions,
             'revert': revert_actions
@@ -36,8 +36,8 @@ def _prepare_auth_updates(auth_dict, sm):
 
 
 def _perform_node_update(update_spec, deployment_id, sm):
-    node_id, node, agent_properties = update_spec
-    storage_node_id = sm._storage_node_id(deployment_id, node_id)
+    node, agent_properties = update_spec
+    storage_node_id = sm._storage_node_id(deployment_id, node.id)
     node.properties['cloudify_agent'] = agent_properties
     update_doc = {'doc': {'properties': node.properties}}
     try:

@@ -33,7 +33,7 @@ Parameters and flags:
 
     -p
         Usage: -p path_to_file.
-        This flag is used in order to specify authentication override rules. Value of this flag will be passed directly to migrate_agents.sh script as a last parameter.
+        This flag is used to specify authentication override rules. Value of this flag will be passed directly to migrate_agents.sh script as a last parameter.
         Check migrate_agents.sh description for more details. 
 
     old_cli_virtenv_dir
