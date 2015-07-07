@@ -4,10 +4,10 @@ import sys
 import yaml
 
 import manager_rest.es_storage_manager as es
-from manager_rest.storage_manager import instance
+from manager_rest.storage_manager import instance as storage_manager_instance
 
 
-def prepare_auth_updates(auth_dict, sm):
+def _prepare_auth_updates(auth_dict, sm):
     result = {}
     for deployment_id, config in auth_dict.iteritems():
         # will throw an exception if there is no such deployment
@@ -35,7 +35,7 @@ def prepare_auth_updates(auth_dict, sm):
     return result
 
 
-def perform_node_update(update_spec, deployment_id, sm):
+def _perform_node_update(update_spec, deployment_id, sm):
     node_id, node, agent_properties = update_spec
     storage_node_id = sm._storage_node_id(deployment_id, node_id)
     node.properties['cloudify_agent'] = agent_properties
@@ -51,26 +51,24 @@ def perform_node_update(update_spec, deployment_id, sm):
                       refresh=True)
 
 
-def perform_deployment_updates(deployment_id, updates, update_key, sm):
+def _perform_deployment_updates(deployment_id, updates, update_key, sm):
     updates_list = updates.get(deployment_id, {}).get(update_key, [])
-    map(lambda u: perform_node_update(u, deployment_id, sm), updates_list)
+    map(lambda u: _perform_node_update(u, deployment_id, sm), updates_list)
 
 
-sm = instance()
+sm = storage_manager_instance()
 
 manager_venv = sys.argv[1]
 operation = sys.argv[2]
 
-with open('auth_config.yaml', 'r') as stream:
-    custom_auth = yaml.load(stream)
-    if custom_auth is None:
-        custom_auth = {}
+with open('auth_config.yaml', 'r') as auth_stream:
+    custom_auth = yaml.load(auth_stream) or {}
 
-actions = prepare_auth_updates(custom_auth, sm)
+actions = _prepare_auth_updates(custom_auth, sm)
 
 for deployment in sm.deployments_list():
     try:
-        perform_deployment_updates(deployment.id, actions, 'update', sm)
+        _perform_deployment_updates(deployment.id, actions, 'update', sm)
         ret = os.system('/bin/bash modify_agents.sh {} {} {} {}'.format(
             deployment.blueprint_id,
             deployment.id,
@@ -78,6 +76,6 @@ for deployment in sm.deployments_list():
             operation
         ))
     finally:
-        perform_deployment_updates(deployment.id, actions, 'revert', sm)
+        _perform_deployment_updates(deployment.id, actions, 'revert', sm)
     if ret:
         sys.exit(ret)
