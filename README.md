@@ -31,6 +31,11 @@ Parameters and flags:
     -m
         Migrate InfluxDB metrics. For this flag to work, flag `-a` must be set as well. This option is implemented by the `migrate_metrics.sh` script.
 
+    -p
+        Usage: -p path_to_file.
+        This flag is used in order to specify authentication override rules. Value of this flag will be passed directly to migrate_agents.sh script as a last parameter.
+        Check migrate_agents.sh description for more details. 
+
     old_cli_virtenv_dir
         Python virtualenv directory used by the CLI initialized to operate the 3.1 manager.
 
@@ -66,6 +71,25 @@ Parameters:
     managers_cli_dir
         A directory where the cfy for the manager specified by the `manager` parameter has been initialized.
         It should contain the .cloudify directory.
+    passwords_path
+        An optional path to a file that contains usernames/passwords that will be used during agent installation/uninstallation process.
+        By default, script will use usernames/passwords that are contained in elastic search database of manager.
+        You can use this parameter to override this behaviour. File is formatted as yaml.
+        Example file:
+
+        deployment_1:
+          host_1:
+            password: new_password
+        deployment_2:
+          host_2:
+            user: new_user
+
+        This file will force migrate_agents to use password 'new_password' during agent modification on host with host id host_1 in deployment deployment_1 
+        and username new_user for host_2 in deployment_2.
+        All other agents will be installed/uninstalled using usernames/passwords stored on manager.
+
+
+        
 
 - `migrate_metrics.sh`
 
