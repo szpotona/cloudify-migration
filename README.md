@@ -23,18 +23,22 @@ Parameters and flags:
     -a
         i.e. "agents hosts software update"
         Without this flag the second phase will not be performed. The process may be
-        completed later by using `migrate_agents.sh` and `migrate_metrics.sh` scripts.
+        accomplished later by using `migrate_agents.sh` and `migrate_metrics.sh` scripts.
 
     -b
-        With this flag set the script suggests updating versions (1.1 -> 1.2 and 3.1 -> 3.2) in each blueprint's imports by displaying a colored diff. The proposed modifications are applied upon user's permission. This option is highly recommended.
+        With this flag set the script suggests replacing strings 1.1 and 3.1 by 1.2 and 3.2
+        in the whole blueprint - a colored diff is displayed. The proposed modifications
+        are applied upon user's acceptance.
 
     -m
-        Migrate InfluxDB metrics. For this flag to work, flag `-a` must be set as well. This option is implemented by the `migrate_metrics.sh` script.
+        Migrate InfluxDB metrics. For this flag to work, flag `-a` must be set as well.
+        This option is implemented by the `migrate_metrics.sh` script.
 
     -p
         Usage: -p path_to_file.
-        This flag is used to specify authentication override rules. Value of this flag will be passed directly to migrate_agents.sh script as the last parameter.
-        Check migrate_agents.sh description for more details. 
+        This flag is used to specify authentication override rules.
+        Value of this flag will be passed directly to the `migrate_agents.sh` script
+        as the last parameter. Check `migrate_agents.sh` description for more details.
 
     old_cli_virtenv_dir
         Python virtualenv directory used by the CLI initialized to operate the 3.1 manager.
@@ -66,16 +70,19 @@ Parameters:
         3.1 or 3.2
 
     managers_cli_venv
-        Python virtualenv directory used by the CLI initialized to operate the manager specified by the `manager` parameter
+        Python virtualenv directory used by the CLI initialized to operate the manager
+        specified by the `manager` parameter
 
     managers_cli_dir
-        A directory where the cfy for the manager specified by the `manager` parameter has been initialized.
-        It should contain the .cloudify directory.
+        A directory where the cfy for the manager specified by the `manager` parameter
+        has been initialized. It should contain the .cloudify directory.
+
     passwords_path
-        An optional path to a file that contains usernames/passwords that will be used during agent installation/uninstallation process.
-        By default, script will use usernames/passwords that are contained in elastic search database of manager.
-        You can use this parameter to override this behaviour. File is formatted as yaml.
-        Example file:
+        An optional path to a file that contains usernames/passwords that will be used
+        during agent installation/uninstallation process. By default, script will use
+        usernames/passwords that are contained in elastic search database of manager.
+        You can use this parameter to override this behaviour. The file's format is YAML,
+        for example:
 
         deployment_1:
           host_1:
@@ -84,12 +91,11 @@ Parameters:
           host_2:
             user: new_user
 
-        This file will force migrate_agents to use password 'new_password' during agent modification on host with host id host_1 in deployment deployment_1 
-        and username new_user for host_2 in deployment_2.
-        All other agents will be installed/uninstalled using usernames/passwords stored on manager.
+        This file will force migrate_agents to use password `new_password` during agent
+        modification on host with host id host_1 in deployment deployment_1 and username
+        `new_user` for host_2 in deployment_2. All other agents will be installed/uninstalled
+        using usernames/passwords stored on manager.
 
-
-        
 
 - `migrate_metrics.sh`
 
