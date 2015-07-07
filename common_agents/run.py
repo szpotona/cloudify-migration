@@ -1,4 +1,5 @@
 import os
+import os.path
 import sys
 
 import yaml
@@ -55,26 +56,41 @@ def _perform_deployment_updates(deployment_id, updates, update_key, sm):
     map(lambda u: _perform_node_update(u, deployment_id, sm), updates_list)
 
 
-sm = storage_manager_instance()
+def main(args):
+    sm = storage_manager_instance()
 
-manager_venv = sys.argv[1]
-operation = sys.argv[2]
+    manager_venv = sys.argv[1]
+    operation = sys.argv[2]
 
-with open('auth_config.yaml', 'r') as auth_stream:
-    custom_auth = yaml.load(auth_stream) or {}
+    with open('auth_config.yaml', 'r') as auth_stream:
+        custom_auth = yaml.load(auth_stream) or {}
 
-actions = _prepare_auth_updates(custom_auth, sm)
+    actions = _prepare_auth_updates(custom_auth, sm)
 
-for deployment in sm.deployments_list():
-    try:
-        _perform_deployment_updates(deployment.id, actions, 'update', sm)
-        ret = os.system('/bin/bash modify_agents.sh {} {} {} {}'.format(
-            deployment.blueprint_id,
-            deployment.id,
-            manager_venv,
-            operation
-        ))
-    finally:
-        _perform_deployment_updates(deployment.id, actions, 'revert', sm)
-    if ret:
-        sys.exit(ret)
+    deployments = sm.deployments_list()
+
+    if os.path.isfile('deployment_id'):
+        with open('deployment_id', 'r') as deployment_file:
+            deployment_id = deployment_file.read()
+            deployments = [d for d in deployments if d.id == deployment_id]
+            if not deployments:
+                raise Exception(
+                    'Deployment {} not found'.format(deployment_id))
+
+    for deployment in deployments:
+        try:
+            _perform_deployment_updates(deployment.id, actions, 'update', sm)
+            ret = os.system('/bin/bash modify_agents.sh {} {} {} {}'.format(
+                deployment.blueprint_id,
+                deployment.id,
+                manager_venv,
+                operation
+            ))
+        finally:
+            _perform_deployment_updates(deployment.id, actions, 'revert', sm)
+        if ret:
+            sys.exit(ret)
+
+
+if __name__ == '__main__':
+    main(sys.argv)
