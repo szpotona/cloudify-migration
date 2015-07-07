@@ -19,9 +19,8 @@ def _prepare_auth_updates(auth_dict, sm):
             agent_properties = node.properties['cloudify_agent']
             revert_actions.append((node, agent_properties))
             agent_properties = agent_properties.copy()
-            updated_keys = ['user', 'password']
             for key in agent_config.keys():
-                if key not in updated_keys:
+                if key not in ['user', 'password']:
                     raise Exception(
                         'Key {0} not allowed in auth config'.format(key))
                 new_value = agent_config.get(key)
