@@ -66,7 +66,7 @@ Parameters and flags:
     -d
         Usage: -d deployment_id
         Optional flag. If specified, migrate_agents will perform operation only on hosts
-        that are part of a deployment with id equal to 'deployment_id'.
+        that are part of a deployment identified by id 'deployment_id'.
         Otherwise, operation will be performed on all hosts.
 
     operation

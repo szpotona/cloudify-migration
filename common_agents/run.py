@@ -59,23 +59,20 @@ def _perform_deployment_updates(deployment_id, updates, update_key, sm):
 def main(args):
     sm = storage_manager_instance()
 
-    manager_venv = sys.argv[1]
-    operation = sys.argv[2]
+    manager_venv = args[1]
+    operation = args[2]
 
     with open('auth_config.yaml', 'r') as auth_stream:
         custom_auth = yaml.load(auth_stream) or {}
 
     actions = _prepare_auth_updates(custom_auth, sm)
 
-    deployments = sm.deployments_list()
-
     if os.path.isfile('deployment_id'):
         with open('deployment_id', 'r') as deployment_file:
             deployment_id = deployment_file.read()
-            deployments = [d for d in deployments if d.id == deployment_id]
-            if not deployments:
-                raise Exception(
-                    'Deployment {} not found'.format(deployment_id))
+            deployments = [sm.get_deployment(deployment_id)]
+    else:
+        deployments = sm.deployments_list()
 
     for deployment in deployments:
         try:

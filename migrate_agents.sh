@@ -6,7 +6,7 @@ BASE_DIR=$(dirname $(readlink -e $0))
 . $BASE_DIR/common.sh
 
 function cleanup {
-    rm -f /tmp/script.tar.gz
+    rm -rf $SCRIPT_PATH $TMP_DIR $DELETE_AUTH_CONFIG_PATH
 }
 trap cleanup EXIT
 
@@ -20,21 +20,18 @@ function usage_exit {
 #$4 - result script path
 #$5 - optional - deployment id
 function prepare_agents_script {
-    rm -rf /tmp/agents_script
-    mkdir -p /tmp/agents_script
-    cp $BASE_DIR/common_agents/* /tmp/agents_script
-    cd /tmp/agents_script
+    TMP_DIR=$(mktemp -d)
+    cp $BASE_DIR/common_agents/* $TMP_DIR
+    cd $TMP_DIR
     mv run.sh.template run.sh
     sed -i s@__MANAGER_ENV__@$1@ run.sh
     sed -i s@__OPERATION__@$2@ run.sh
     cp $3 auth_config.yaml
-    rm -f deployment_id
     if [ -n "$5" ]; then
         echo -n $5 > deployment_id
     fi
     tar -cf $4 *
-    cd /tmp
-    rm -rf /tmp/agents_script
+    cd -
 }
 
 DEPLOYMENT_ID=""
@@ -88,19 +85,16 @@ if [[ $# -gt 4 ]]; then
     AUTH_CONFIG_PATH=$(absolute_path $5)
 else
     # creating empty dummy config file for simplicity:
-    AUTH_CONFIG_PATH=/tmp/auth_config_6534.yaml
-    DELETE_AUTH_CONFIG=1
-    touch $AUTH_CONFIG_PATH
+    AUTH_CONFIG_PATH=$(tempfile)
+    DELETE_AUTH_CONFIG_PATH=$AUTH_CONFIG_PATH
 fi
 
 echo "Preparing operation script"
-prepare_agents_script $MANAGER_VENV $OPERATION $AUTH_CONFIG_PATH /tmp/script.tar.gz $DEPLOYMENT_ID
-if [[ $DELETE_AUTH_CONFIG -eq 1 ]]; then
-    rm $AUTH_CONFIG_PATH
-fi
+SCRIPT_PATH=$(tempfile)
+prepare_agents_script $MANAGER_VENV $OPERATION $AUTH_CONFIG_PATH $SCRIPT_PATH $DEPLOYMENT_ID
 echo "Operation script prepared, running operation $OPERATION"
 activate_cli $CLOUDIFY_PATH $VENV_PATH
 supplement_credentials $2
-run_operation /tmp/script.tar.gz $RUNNER
+run_operation $SCRIPT_PATH $RUNNER
 echo "Operation $OPERATION completed"
 
