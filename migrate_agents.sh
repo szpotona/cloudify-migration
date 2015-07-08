@@ -85,12 +85,12 @@ if [[ $# -gt 4 ]]; then
     AUTH_CONFIG_PATH=$(absolute_path $5)
 else
     # creating empty dummy config file for simplicity:
-    AUTH_CONFIG_PATH=$(tempfile)
+    AUTH_CONFIG_PATH=$(mktemp)
     DELETE_AUTH_CONFIG_PATH=$AUTH_CONFIG_PATH
 fi
 
 echo "Preparing operation script"
-SCRIPT_PATH=$(tempfile)
+SCRIPT_PATH=$(mktemp)
 prepare_agents_script $MANAGER_VENV $OPERATION $AUTH_CONFIG_PATH $SCRIPT_PATH $DEPLOYMENT_ID
 echo "Operation script prepared, running operation $OPERATION"
 activate_cli $CLOUDIFY_PATH $VENV_PATH
