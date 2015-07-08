@@ -4,8 +4,10 @@ import sys
 
 import yaml
 
+import agents_utils
 import manager_rest.es_storage_manager as es
 from manager_rest.storage_manager import instance as storage_manager_instance
+
 
 
 def _prepare_auth_updates(auth_dict, sm):
@@ -40,10 +42,7 @@ def _perform_node_update(update_spec, deployment_id, sm):
     storage_node_id = sm._storage_node_id(deployment_id, node.id)
     node.properties['cloudify_agent'] = agent_properties
     update_doc = {'doc': {'properties': node.properties}}
-    try:
-        connection = sm._connection  # 3.2
-    except AttributeError:
-        connection = sm._get_es_conn()  # 3.1
+    connection = agents_utils.es_connection_from_storage_manager(sm)
     connection.update(index=es.STORAGE_INDEX_NAME,
                       doc_type=es.NODE_TYPE,
                       id=storage_node_id,
