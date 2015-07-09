@@ -60,6 +60,7 @@ def main(args):
 
     manager_venv = args[1]
     operation = args[2]
+    max_attempts = args[3]
 
     with open('auth_config.yaml', 'r') as auth_stream:
         custom_auth = yaml.load(auth_stream) or {}
@@ -76,11 +77,12 @@ def main(args):
     for deployment in deployments:
         try:
             _perform_deployment_updates(deployment.id, actions, 'update', sm)
-            ret = os.system('/bin/bash modify_agents.sh {} {} {} {}'.format(
+            ret = os.system('/bin/bash modify_agents.sh {} {} {} {} {}'.format(
                 deployment.blueprint_id,
                 deployment.id,
                 manager_venv,
-                operation
+                operation,
+                max_attempts
             ))
         finally:
             _perform_deployment_updates(deployment.id, actions, 'revert', sm)
