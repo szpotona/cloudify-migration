@@ -10,6 +10,9 @@ from cloudify_cli.logger import (
     configure_loggers
 )
 
+import common_agents.agents_utils as agents_utils
+
+
 CHECKED_WORKFLOW_ID = 'hosts_software_uninstall'
 TIME_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
 FAILED_TASK_TYPE = 'task_failed'
@@ -17,9 +20,12 @@ FAILURE_MSG_FORMAT = ('Deployment {0}: failure detected '
                       'in workflow {1}, execution id {2}:')
 NO_EXECUTION_MSG_FORMAT = 'Deployment {0}: workflow {1} hasn\'t been executed.'
 OK_MSG_FORMAT = 'Deployment {0}: workflow {1} succeeded, execution id {2}.'
+NOT_INSTALLED_MSG_FORMAT = ('Deployment {0}: deployment not installed,'
+                            ' skipping.')
 
 RESULT_TASKS = 'tasks'
 RESULT_NO_EXECUTION = 'no_execution'
+RESULT_NOT_INSTALLED = 'deployment_not_installed'
 
 
 def execution_timestamp(execution):
@@ -28,6 +34,9 @@ def execution_timestamp(execution):
 
 
 def deployment_failed_tasks(client, deployment):
+    node_instances = client.node_instances.list(deployment_id=deployment.id)
+    if not agents_utils.is_deployment_installed(node_instances):
+        return {'type': RESULT_NOT_INSTALLED, 'deployment': deployment}
     executions = client.executions.list(deployment_id=deployment.id)
     executions = [e for e in executions
                   if e.workflow_id == CHECKED_WORKFLOW_ID]
@@ -71,6 +80,9 @@ def main():
                                            CHECKED_WORKFLOW_ID,
                                            exc.id)
                 logger.info(msg)
+        elif res.get('type') == RESULT_NOT_INSTALLED:
+            deployment = res.get('deployment')
+            logger.info(NOT_INSTALLED_MSG_FORMAT.format(deployment.id))
         else:
             deployment = res.get('deployment')
             failure_detected = True
@@ -83,4 +95,3 @@ def main():
 
 if __name__ == '__main__':
     sys.exit(main())
-

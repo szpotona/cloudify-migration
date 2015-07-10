@@ -75,19 +75,36 @@ def main(args):
         deployments = sm.deployments_list()
 
     for deployment in deployments:
-        try:
-            _perform_deployment_updates(deployment.id, actions, 'update', sm)
-            ret = os.system('/bin/bash modify_agents.sh {} {} {} {} {}'.format(
-                deployment.blueprint_id,
-                deployment.id,
-                manager_venv,
-                operation,
-                max_attempts
-            ))
-        finally:
-            _perform_deployment_updates(deployment.id, actions, 'revert', sm)
-        if ret:
-            sys.exit(ret)
+        node_instances = sm.get_node_instances(deployment.id)
+        if agents_utils.is_deployment_installed(node_instances):
+            try:
+                _perform_deployment_updates(
+                    deployment.id,
+                    actions,
+                    'update',
+                    sm
+                )
+                cmd = '/bin/bash modify_agents.sh {} {} {} {} {}'.format(
+                    deployment.blueprint_id,
+                    deployment.id,
+                    manager_venv,
+                    operation,
+                    max_attempts
+                )
+                ret = os.system(cmd)
+            finally:
+                _perform_deployment_updates(
+                    deployment.id,
+                    actions,
+                    'revert',
+                    sm
+                )
+            if ret:
+                sys.exit(ret)
+        else:
+            print 'Deployment {0} is not installed, skipping'.format(
+                deployment.id
+            )
 
 
 if __name__ == '__main__':
