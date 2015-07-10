@@ -23,7 +23,8 @@ def create_events_query_body(execution_id, last_event, batch_size):
             '@timestamp': {
                 'order': 'asc',
                 'ignore_unmapped': True
-            }}],
+            }
+        }],
         'query': {
             'bool': {
                 'must': [

@@ -1,13 +1,13 @@
-from datetime import datetime
-import uuid
 import sys
 import time
-
-import agents_utils as utils
+import uuid
+from datetime import datetime
 
 from manager_rest import models
 from manager_rest.storage_manager import instance as storage_manager_instance
 from manager_rest.workflow_client import workflow_client
+
+import agents_utils as utils
 
 
 _DEFAULT_ATTEMPT_LIMIT = -1
@@ -77,8 +77,9 @@ def _wait_for_execution_finish(execution_id, attempt_limit, sm):
         if (not canceled and
            event.get('event_type') == 'task_failed'):
             attempt = utils.event_task_attempts(event)
-            if (attempt is not None and attempt_limit >= 0
-               and attempt >= attempt_limit):
+            if (attempt is not None and
+               attempt_limit >= 0 and
+               attempt >= attempt_limit):
                 # We need to cancel executions:
                 msg_format = 'Retry limit exceeded, current: {0}, limit: {1}'
                 msg = msg_format.format(attempt, attempt_limit)
