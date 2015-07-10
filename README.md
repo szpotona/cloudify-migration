@@ -76,9 +76,9 @@ Parameters and flags:
 
     -n
         Usage: -n max_number_of_attempts
-        Optional flag. This flag is used to specify maximum number of attempts 
-        of single task during agent migration. If this value is exceeded agent
-        migration workflow will be cancelled. It's default value is -1, which
+        Optional flag. This flag is used to specify the maximum number of attempts 
+        of a single task during agent migration. If this value is exceeded agent
+        migration workflow will be cancelled. Its default value is -1, which
         means that there is no limit.
 
     operation
