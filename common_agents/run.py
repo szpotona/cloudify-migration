@@ -7,6 +7,8 @@ import yaml
 import manager_rest.es_storage_manager as es
 from manager_rest.storage_manager import instance as storage_manager_instance
 
+import agents_utils
+
 
 def _prepare_auth_updates(auth_dict, sm):
     result = {}
@@ -40,10 +42,7 @@ def _perform_node_update(update_spec, deployment_id, sm):
     storage_node_id = sm._storage_node_id(deployment_id, node.id)
     node.properties['cloudify_agent'] = agent_properties
     update_doc = {'doc': {'properties': node.properties}}
-    try:
-        connection = sm._connection  # 3.2
-    except AttributeError:
-        connection = sm._get_es_conn()  # 3.1
+    connection = agents_utils.es_connection_from_storage_manager(sm)
     connection.update(index=es.STORAGE_INDEX_NAME,
                       doc_type=es.NODE_TYPE,
                       id=storage_node_id,
@@ -61,6 +60,7 @@ def main(args):
 
     manager_venv = args[1]
     operation = args[2]
+    max_attempts = args[3]
 
     with open('auth_config.yaml', 'r') as auth_stream:
         custom_auth = yaml.load(auth_stream) or {}
@@ -77,11 +77,12 @@ def main(args):
     for deployment in deployments:
         try:
             _perform_deployment_updates(deployment.id, actions, 'update', sm)
-            ret = os.system('/bin/bash modify_agents.sh {} {} {} {}'.format(
+            ret = os.system('/bin/bash modify_agents.sh {} {} {} {} {}'.format(
                 deployment.blueprint_id,
                 deployment.id,
                 manager_venv,
-                operation
+                operation,
+                max_attempts
             ))
         finally:
             _perform_deployment_updates(deployment.id, actions, 'revert', sm)

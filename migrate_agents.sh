@@ -11,14 +11,15 @@ function cleanup {
 trap cleanup EXIT
 
 function usage_exit {
-    error "Usage: $SCRIPT_NAME [-d deployment_id] (install|uninstall) (3.1|3.2) cli_venv cli_dir [auth_config]" 1
+    error "Usage: $SCRIPT_NAME [-d deployment_id] [-n attempts_limit] (install|uninstall) (3.1|3.2) cli_venv cli_dir [auth_config]" 1
 }
 
 #$1 - manager virtualenv path - it depends on version
 #$2 - operation - either migration_install or migration_uninstall
 #$3 - path to custom authentication configuration
 #$4 - result script path
-#$5 - optional - deployment id
+#$5 - number of failed tasks
+#$6 - optional - deployment id
 function prepare_agents_script {
     TMP_DIR=$(mktemp -d)
     cp $BASE_DIR/common_agents/* $TMP_DIR
@@ -26,19 +27,24 @@ function prepare_agents_script {
     mv run.sh.template run.sh
     sed -i s@__MANAGER_ENV__@$1@ run.sh
     sed -i s@__OPERATION__@$2@ run.sh
+    sed -i s@__MAX_ATTEMPTS__@$5@ run.sh
     cp $3 auth_config.yaml
-    if [ -n "$5" ]; then
-        echo -n $5 > deployment_id
+    if [ -n "$6" ]; then
+        echo -n $6 > deployment_id
     fi
     tar -cf $4 *
     cd -
 }
 
 DEPLOYMENT_ID=""
-while getopts d: opt; do
+MAX_ATTEMPTS=-1
+while getopts d:n: opt; do
     case $opt in
         d)
             DEPLOYMENT_ID=$OPTARG
+            ;;
+        n)
+            MAX_ATTEMPTS=$OPTARG
             ;;
         \?)
             usage_exit
@@ -46,8 +52,6 @@ while getopts d: opt; do
     esac
 done
 shift $((OPTIND - 1))
-
-
 
 if [[ $# -lt 4 ]]; then
     usage_exit
@@ -91,7 +95,7 @@ fi
 
 echo "Preparing operation script"
 SCRIPT_PATH=$(mktemp)
-prepare_agents_script $MANAGER_VENV $OPERATION $AUTH_CONFIG_PATH $SCRIPT_PATH $DEPLOYMENT_ID
+prepare_agents_script $MANAGER_VENV $OPERATION $AUTH_CONFIG_PATH $SCRIPT_PATH $MAX_ATTEMPTS $DEPLOYMENT_ID
 echo "Operation script prepared, running operation $OPERATION"
 activate_cli $CLOUDIFY_PATH $VENV_PATH
 supplement_credentials $2

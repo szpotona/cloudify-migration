@@ -1,8 +1,8 @@
 #!/bin/bash
 
 set -e
-if [[ $# -lt 4 ]]; then
-    echo "Usage: $0 blueprint_id deployment_id manager_env operation"
+if [[ $# -lt 5 ]]; then
+    echo "Usage: $0 blueprint_id deployment_id manager_env operation max_attempts"
     exit 1
 fi
 
@@ -16,7 +16,7 @@ service celeryd-${WORKER_MODIFIER} restart
 echo "Celery worker restarted, executing operation"
 
 set +e
-$3/bin/python execute.py $1 $2 $4
+$3/bin/python execute.py $1 $2 $4 $5
 CODE=$?
 set -e
 

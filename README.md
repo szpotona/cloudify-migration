@@ -40,6 +40,11 @@ Parameters and flags:
         Value of this flag will be passed directly to the `migrate_agents.sh` script
         as the last parameter. Check `migrate_agents.sh` description for more details.
 
+    -n
+        Usage: -n max_number_of_attempts
+        This flag is used to specify the maximum number of attempts of a single task
+        during agent migration. Check `migrate_agents.sh` description for more details.
+
     old_cli_virtenv_dir
         Python virtualenv directory used by the CLI initialized to operate the 3.1 manager.
 
@@ -68,6 +73,13 @@ Parameters and flags:
         Optional flag. If specified, migrate_agents will perform operation only on hosts
         that are part of a deployment identified by id 'deployment_id'.
         Otherwise, operation will be performed on all hosts.
+
+    -n
+        Usage: -n max_number_of_attempts
+        Optional flag. This flag is used to specify the maximum number of attempts 
+        of a single task during agent migration. If this value is exceeded agent
+        migration workflow will be cancelled. Its default value is -1, which
+        means that there is no limit.
 
     operation
         install or uninstall
