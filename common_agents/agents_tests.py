@@ -4,7 +4,7 @@ import agents_utils as utils
 
 
 class TestTaskAtteptsParser(unittest.TestCase):
-    def task_attempts_from_event_test(self):
+    def test_task_attempts_from_event(self):
         event = {
             u'event_type': u'task_failed',
             u'timestamp': u'2015-07-09 13:10:11.885+0000',
@@ -38,7 +38,7 @@ class TestTaskAtteptsParser(unittest.TestCase):
         res = utils.event_task_attempts(event)
         self.assertEquals(res, expected)
 
-    def task_retries_from_msg_test(self):
+    def test_task_retries_from_msg(self):
         inputs = [
             'random message [attempt 4/19]',
             'random message with infinite attempts [attempt 5]',
