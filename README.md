@@ -42,7 +42,7 @@ Parameters and flags:
 
     -n
         Usage: -n max_number_of_attempts
-        This flag is used to specify maximum number of attempts of single task
+        This flag is used to specify the maximum number of attempts of a single task
         during agent migration. Check `migrate_agents.sh` description for more details.
 
     old_cli_virtenv_dir

@@ -4,10 +4,10 @@ import sys
 
 import yaml
 
-import agents_utils
 import manager_rest.es_storage_manager as es
 from manager_rest.storage_manager import instance as storage_manager_instance
 
+import agents_utils
 
 
 def _prepare_auth_updates(auth_dict, sm):

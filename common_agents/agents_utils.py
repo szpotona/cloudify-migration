@@ -1,6 +1,4 @@
 import re
-import sys
-import time
 
 
 EXIT_OK = 0
