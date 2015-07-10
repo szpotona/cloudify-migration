@@ -7,6 +7,8 @@ EXIT_RETRY_LIMIT_EXCEEDED = 2
 
 _TASK_RETRIES_REGEXP = re.compile('.*\[attempt (?P<retry>\d+)(/\d+)?\]$')
 
+_NODE_INSTANCE_STATE_STARTED = 'started'
+
 
 def es_connection_from_storage_manager(sm):
     try:
@@ -50,3 +52,10 @@ def event_task_attempts(event, default=None):
         return ctx.get('task_current_retries') + 1
     msg = event.get('message', {}).get('text', '')
     return task_attempt_from_msg(msg, default)
+
+
+def is_deployment_installed(deployment_node_instances):
+    for node_instance in deployment_node_instances:
+        if node_instance.state != _NODE_INSTANCE_STATE_STARTED:
+            return False
+    return True

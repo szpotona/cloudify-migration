@@ -10,9 +10,6 @@ from manager_rest.storage_manager import instance as storage_manager_instance
 import agents_utils
 
 
-_NODE_INSTANCE_STATE_STARTED = 'started'
-
-
 def _prepare_auth_updates(auth_dict, sm):
     result = {}
     for deployment_id, config in auth_dict.iteritems():
@@ -58,14 +55,6 @@ def _perform_deployment_updates(deployment_id, updates, update_key, sm):
     map(lambda u: _perform_node_update(u, deployment_id, sm), updates_list)
 
 
-def _is_deployment_installed(deployment_id, sm):
-    node_instances = sm.get_node_instances(deployment_id)
-    for node_instance in node_instances:
-        if node_instance.state != _NODE_INSTANCE_STATE_STARTED:
-            return False
-    return True
-
-
 def main(args):
     sm = storage_manager_instance()
 
@@ -86,7 +75,8 @@ def main(args):
         deployments = sm.deployments_list()
 
     for deployment in deployments:
-        if _is_deployment_installed(deployment.id, sm):
+        node_instances = sm.get_node_instances(deployment.id)
+        if agents_utils.is_deployment_installed(node_instances):
             try:
                 _perform_deployment_updates(
                     deployment.id,
