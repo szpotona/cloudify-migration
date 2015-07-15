@@ -73,7 +73,7 @@ def main(args):
             deployments = [sm.get_deployment(deployment_id)]
     else:
         deployments = sm.deployments_list()
-
+    errors = []
     for deployment in deployments:
         node_instances = sm.get_node_instances(deployment.id)
         if agents_utils.is_deployment_installed(node_instances):
@@ -100,11 +100,13 @@ def main(args):
                     sm
                 )
             if ret:
-                sys.exit(ret)
+                errors.append(deployment.id)
         else:
             print 'Deployment {0} is not installed, skipping'.format(
                 deployment.id
             )
+    for dep in errors:
+        print 'Deployment {0}: operation {1} failed.'.format(dep, operation)
 
 
 if __name__ == '__main__':
