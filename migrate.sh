@@ -76,7 +76,7 @@ function download_all_blueprints {
 function update_blueprint {
     if $MODIFY_BLUEPRINTS; then
         changed_blueprint=$1'.chg'
-        sed 's/1.1/1.2/g;s/3.1/3.2/g' $1 > $changed_blueprint
+        sed 's/3\.1\(.*\.\(yaml\|yml\)\)/3.2\1/g; s/1\.1\(.*\.\(yaml\|yml\)\)/1.2\1/g' $1 > $changed_blueprint
         if ! diff --old-group-format=$'\e[0;31m%<\e[0m' \
                   --new-group-format=$'\e[0;32m%>\e[0m' \
                   --unchanged-group-format='' $1 $changed_blueprint; then
