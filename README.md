@@ -121,14 +121,14 @@ The mandatory parameters are the same as for the `migrate.sh` script. No optiona
 
 - `print_failed_tasks.sh`
 
-This scripts can be used in order to check if workflows run by migrate_agents.sh succeeded.
+This script can be used in order to check if workflows run by migrate_agents.sh succeeded.
 
 Parameters and flags:
 
     -w
         Usage: -w workflow_id
         Default value: `hosts_software_uninstall`.
-        This flag lets user specify what workflows should be checked.
+        This flag lets the user specify what workflows should be checked.
 
     managers_cli_venv
         Python virtualenv directory used by the CLI initialized to operate the manager
