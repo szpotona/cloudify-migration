@@ -83,11 +83,15 @@ def _wait_for_execution_finish(execution_id, attempt_limit, sm):
                 # We need to cancel executions:
                 msg_format = 'Retry limit exceeded, current: {0}, limit: {1}'
                 msg = msg_format.format(attempt, attempt_limit)
-                sm.update_execution_status(
-                    execution_id,
-                    models.Execution.CANCELLING,
-                    msg
-                )
+                status = sm.get_execution(execution_id).status
+                if status in (models.Execution.PENDING,
+                              models.Execution.STARTED):
+                    # We cancel execution only if it is still running:
+                    sm.update_execution_status(
+                        execution_id,
+                        models.Execution.CANCELLING,
+                        msg
+                    )
                 canceled = True
     if canceled:
         return utils.EXIT_RETRY_LIMIT_EXCEEDED
