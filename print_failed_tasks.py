@@ -1,6 +1,6 @@
+import datetime
 import sys
 import time
-import datetime
 
 from cloudify_cli import utils
 from cloudify_cli.execution_events_fetcher import ExecutionEventsFetcher

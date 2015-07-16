@@ -125,10 +125,9 @@ This scripts can be used in order to check if workflows run by migrate_agents.sh
 
 Parameters and flags:
 
-    -o
-        Usage: -o operation_id
-        Optional flag. Possible values: `install` or `uninstall`.
-        Default value: `uninstall`.
+    -w
+        Usage: -w workflow_id
+        Default value: `hosts_software_uninstall`.
         This flag lets user specify what workflows should be checked.
 
     managers_cli_venv
