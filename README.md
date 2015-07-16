@@ -119,6 +119,27 @@ Parameters and flags:
 
 The mandatory parameters are the same as for the `migrate.sh` script. No optional flags are specified for this script for the time being.
 
+- `print_failed_tasks.sh`
+
+This scripts can be used in order to check if workflows run by migrate_agents.sh succeeded.
+
+Parameters and flags:
+
+    -o
+        Usage: -o operation_id
+        Optional flag. Possible values: `install` or `uninstall`.
+        Default value: `uninstall`.
+        This flag lets user specify what workflows should be checked.
+
+    managers_cli_venv
+        Python virtualenv directory used by the CLI initialized to operate the manager
+        specified by the `manager` parameter
+
+    managers_cli_dir
+        A directory where the cfy for the manager specified by the `manager` parameter
+        has been initialized. It should contain the .cloudify directory.
+
+
 
 ###Tips:###
 
