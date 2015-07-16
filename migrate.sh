@@ -124,7 +124,7 @@ update_and_upload_all_blueprints
 create_deployments
 if $UPDATE_HOSTS_SOFTWARE; then
     $BASE_DIR/migrate_agents.sh -n $MAX_ATTEMPTS uninstall 3.1 $OLD_CLI_PYTHON_VIRTENV $OLD_CLI_DIR $AUTHENTICATION_DATA_OVERRIDE_PATH
-    if ! $BASE_DIR/print_failed_tasks.sh $OLD_CLI_PYTHON_VIRTENV $OLD_CLI_DIR; then
+    if ! $BASE_DIR/print_failed_tasks.sh -o uninstall $OLD_CLI_PYTHON_VIRTENV $OLD_CLI_DIR; then
         echo 'Failure during agent uninstallation process detected.'
         echo -n 'Make sure that agents were uninstalled properly and '
         echo 'continue migration process manually.'
@@ -134,4 +134,8 @@ if $UPDATE_HOSTS_SOFTWARE; then
         $BASE_DIR/migrate_metrics.sh $OLD_CLI_PYTHON_VIRTENV $OLD_CLI_DIR $NEW_CLI_PYTHON_VIRTENV $NEW_CLI_DIR
     fi
     $BASE_DIR/migrate_agents.sh -n $MAX_ATTEMPTS install 3.2 $NEW_CLI_PYTHON_VIRTENV $NEW_CLI_DIR $AUTHENTICATION_DATA_OVERRIDE_PATH
+    if ! $BASE_DIR/print_failed_tasks.sh -o install $NEW_CLI_PYTHON_VIRTENV $NEW_CLI_DIR; then
+        echo 'Failure during agent installation process detected.'
+        exit 1
+    fi
 fi
