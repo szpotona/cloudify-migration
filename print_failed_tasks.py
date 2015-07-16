@@ -1,6 +1,6 @@
+import datetime
 import sys
 import time
-import datetime
 
 from cloudify_cli import utils
 from cloudify_cli.execution_events_fetcher import ExecutionEventsFetcher
@@ -13,7 +13,6 @@ from cloudify_cli.logger import (
 import common_agents.agents_utils as agents_utils
 
 
-CHECKED_WORKFLOW_ID = 'hosts_software_uninstall'
 TIME_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
 FAILED_TASK_TYPE = 'task_failed'
 FAILURE_MSG_FORMAT = ('Deployment {0}: failure detected '
@@ -33,13 +32,13 @@ def execution_timestamp(execution):
                                                   TIME_FORMAT).timetuple())
 
 
-def deployment_failed_tasks(client, deployment):
+def deployment_failed_tasks(client, workflow_id, deployment):
     node_instances = client.node_instances.list(deployment_id=deployment.id)
     if not agents_utils.is_deployment_installed(node_instances):
         return {'type': RESULT_NOT_INSTALLED, 'deployment': deployment}
     executions = client.executions.list(deployment_id=deployment.id)
     executions = [e for e in executions
-                  if e.workflow_id == CHECKED_WORKFLOW_ID]
+                  if e.workflow_id == workflow_id]
     if not executions:
         return {'type': RESULT_NO_EXECUTION, 'deployment': deployment}
     executions.sort(key=execution_timestamp)
@@ -55,13 +54,15 @@ def deployment_failed_tasks(client, deployment):
     return {'type': RESULT_TASKS, 'failed_tasks': events, 'execution': last}
 
 
-def main():
+def main(args):
+    workflow_id = args[1]
     configure_loggers()
     logger = get_logger()
     manager_ip = utils.get_management_server_ip()
     client = utils.get_rest_client(manager_ip)
     deployments = client.deployments.list()
-    results = map(lambda d: deployment_failed_tasks(client, d), deployments)
+    results = map(lambda d: deployment_failed_tasks(client, workflow_id, d),
+                  deployments)
     failure_detected = False
     for res in results:
         if res.get('type') == RESULT_TASKS:
@@ -70,14 +71,14 @@ def main():
             if tasks:
                 failure_detected = True
                 msg = FAILURE_MSG_FORMAT.format(exc.deployment_id,
-                                                CHECKED_WORKFLOW_ID,
+                                                workflow_id,
                                                 exc.id)
                 logger.info(msg)
                 get_events_logger()(tasks)
                 logger.info('Total tasks failed: {0}\n'.format(len(tasks)))
             else:
                 msg = OK_MSG_FORMAT.format(exc.deployment_id,
-                                           CHECKED_WORKFLOW_ID,
+                                           workflow_id,
                                            exc.id)
                 logger.info(msg)
         elif res.get('type') == RESULT_NOT_INSTALLED:
@@ -87,11 +88,11 @@ def main():
             deployment = res.get('deployment')
             failure_detected = True
             logger.info(NO_EXECUTION_MSG_FORMAT.format(deployment.id,
-                                                       CHECKED_WORKFLOW_ID))
+                                                       workflow_id))
     if failure_detected:
         logger.info('Failure detected.')
     return int(failure_detected)
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    sys.exit(main(sys.argv))
