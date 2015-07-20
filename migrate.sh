@@ -60,15 +60,16 @@ trap cleanup EXIT
 
 function download_all_blueprints {
     activate_old_cli
-    if python $BASE_DIR/download_blueprints.py $BLUEPRINTS_DIR; then
-        echo "All blueprints that are to be migrated have been stored in $BLUEPRINTS_DIR"
-    else
+    if ! python $BASE_DIR/download_blueprints.py $BLUEPRINTS_DIR; then
         error "Downloading blueprints from the old Cloudify Manager failed.." 1
     fi
     for blueprint_tar_gz in $BLUEPRINTS_DIR/*.tar.gz; do
-        extracted_dir="${blueprint_tar_gz%%.tar.gz}"
+        local extracted_dir="${blueprint_tar_gz%%.tar.gz}"
+        local untar_options="xf $blueprint_tar_gz -C $extracted_dir --strip-components 1"
         mkdir $extracted_dir
-        tar xzf $blueprint_tar_gz -C $extracted_dir --strip-components 1
+        if ! (tar $untar_options) 2> /dev/null; then
+            tar z$untar_options
+        fi
         rm $blueprint_tar_gz
     done
 }
