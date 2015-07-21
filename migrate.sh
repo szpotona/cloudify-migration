@@ -76,8 +76,14 @@ function download_all_blueprints {
 
 function update_blueprint {
     if $MODIFY_BLUEPRINTS; then
-        changed_blueprint=$1'.chg'
-        sed 's/3\.1\(.*\.\(yaml\|yml\)\)/3.2\1/g; s/1\.1\(.*\.\(yaml\|yml\)\)/1.2\1/g' $1 > $changed_blueprint
+        local changed_blueprint=$1'.chg'
+        local extensions_regexp='\.\(yaml\|yml\|zip\)'
+        function version_repl_regexp {
+            local major_version_no=$1
+            echo "s/$major_version_no\.1\(.*$extensions_regexp\)/$major_version_no.2\1/g"
+        }
+        local sed_regexp=$(version_repl_regexp 3)"; "$(version_repl_regexp 1)
+        sed "$sed_regexp" $1 > $changed_blueprint
         if ! diff --old-group-format=$'\e[0;31m%<\e[0m' \
                   --new-group-format=$'\e[0;32m%>\e[0m' \
                   --unchanged-group-format='' $1 $changed_blueprint; then
