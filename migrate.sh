@@ -101,14 +101,14 @@ function update_blueprint {
 function update_and_upload_all_blueprints {
     activate_new_cli
     for blueprint_dir in $BLUEPRINTS_DIR/*; do
-        potential_bpnts=( $blueprint_dir/*.yaml )
+        local potential_bpnts=( $blueprint_dir/*.yaml )
         if [ ${#potential_bpnts[@]} -eq 1 ]; then # There is only one yaml file - our blueprint
-            blueprint=${potential_bpnts[0]}
+            local blueprint=${potential_bpnts[0]}
         else                                      # There are more files than can possibly be a blueprint
             for potential_bpnt in "${potential_bpnts[@]}"; do
                 read -p "Is $potential_bpnt a blueprint you want to migrate? [y/n] " user_resp
                 if [[ $user_resp =~ $USER_YES_RESP_REGEXP ]]; then
-                    blueprint=$potential_bpnt
+                    local blueprint=$potential_bpnt
                     break # We assume there should be only one proper blueprint in $blueprint_dir directory
                 fi
             done
