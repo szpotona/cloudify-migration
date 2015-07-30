@@ -11,7 +11,7 @@ function cleanup {
 trap cleanup EXIT
 
 function usage_exit {
-    error "Usage: $SCRIPT_NAME [-d deployment_id] [-n attempts_limit] (install|uninstall) (3.1|3.2) cli_venv cli_dir [auth_config]" 1
+    error "Usage: $SCRIPT_NAME [-d deployment_id] [-n attempts_limit] (install|uninstall) (3.1|3.2|3.2.1) cli_venv cli_dir [auth_config]" 1
 }
 
 #$1 - manager virtualenv path - it depends on version
@@ -74,7 +74,7 @@ case $2 in
         RUNNER=run_on_manager.sh
         MANAGER_VENV=/opt/manager
         ;;
-    3.2)
+    3.2 | 3.2.1)
         RUNNER=run_on_docker.sh
         MANAGER_VENV=/opt/manager/env
         ;;
