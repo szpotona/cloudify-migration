@@ -53,7 +53,8 @@ def _start_workflow(blueprint_id, deployment_id,
         workflow_id=workflow_id,
         deployment_id=deployment_id,
         error='',
-        parameters=[]
+        parameters=[],
+        is_system_workflow=False
     )
 
     sm.put_execution(new_execution.id, new_execution)
