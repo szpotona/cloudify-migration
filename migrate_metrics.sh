@@ -11,7 +11,7 @@ function usage {
     echo "Usage: $SCRIPT_NAME old_cli_venv old_cli_dir new_cli_venv new_cli_dir docker/nodocker"
 }
 
-if [[ $# != 5 ]]; then
+if [[ $# != 4 ]]; then
     usage
     error "Wrong number of parameters" 2
 fi
@@ -20,7 +20,7 @@ perform_setup $1 $2 $3 $4
 
 function export_metrics {
     activate_old_cli
-    if [[ '$5' != 'docker' ]]; then
+    if [[ $OLD_MANAGER_VER == '3.1' ]]; then
         cfy ssh -c "sudo tar -czf $OLD_MAGIC_PATH  /opt/influxdb/shared/data"
     else
         cd $BASE_DIR/common_metrics/export
