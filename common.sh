@@ -25,6 +25,7 @@ function perform_setup {
     # Location of the .cloudify directory initialized by Cloudify CLI to manage the new manager
     NEW_CLI_DIR=$(absolute_path $4)
 
+    resolve_managers_versions
     supplement_managers_credentials
 }
 
@@ -77,6 +78,20 @@ function run_operation {
     cfy ssh -c 'rm -f /tmp/runner.sh /tmp/script.tar.gz'
 }
 
+function get_manager_version {
+    echo $(python $BASE_DIR/get_manager_version.py)
+}
+
+function resolve_managers_versions {
+    activate_old_cli
+    export OLD_MANAGER_VER=$(get_manager_version)
+    activate_new_cli
+    export NEW_MANAGER_VER=$(get_manager_version)
+    if [[ $NEW_MANAGER_VER < $OLD_MANAGER_VER ]]; then
+        error "Downgrade to a lower version is not supported" 10
+    fi
+}
+
 # Takes one parameter (for example 3.1) - version of the manager whose credentials should be established
 # Appropriate CLI should be activated before calling this function
 function supplement_credentials {
@@ -91,7 +106,7 @@ function supplement_credentials {
 # management_user and management_key set to null
 function supplement_managers_credentials {
     activate_old_cli
-    supplement_credentials 3.1
+    supplement_credentials $OLD_MANAGER_VER
     activate_new_cli
-    supplement_credentials 3.2
+    supplement_credentials $NEW_MANAGER_VER
 }

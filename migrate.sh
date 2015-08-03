@@ -77,13 +77,7 @@ function download_all_blueprints {
 function update_blueprint {
     if $MODIFY_BLUEPRINTS; then
         local changed_blueprint=$1'.chg'
-        local extensions_regexp='\.\(yaml\|yml\|zip\)'
-        function version_repl_regexp {
-            local major_version_no=$1
-            echo "s/$major_version_no\.1\(.*$extensions_regexp\)/$major_version_no.2\1/g"
-        }
-        local sed_regexp=$(version_repl_regexp 3)"; "$(version_repl_regexp 1)
-        sed "$sed_regexp" $1 > $changed_blueprint
+        python $BASE_DIR/update_blueprint.py $1 $changed_blueprint $OLD_MANAGER_VER $NEW_MANAGER_VER
         if ! diff --old-group-format=$'\e[0;31m%<\e[0m' \
                   --new-group-format=$'\e[0;32m%>\e[0m' \
                   --unchanged-group-format='' $1 $changed_blueprint; then
@@ -92,7 +86,7 @@ function update_blueprint {
                 mv $changed_blueprint $1
             else
                 rm $changed_blueprint
-                read -p "Please make $1 compliant with Cloudify 3.2 on your own and press enter."
+                read -p "Please make $1 compliant with Cloudify $NEW_MANAGER_VER on your own and press enter."
             fi
         fi
     fi
@@ -126,11 +120,12 @@ function create_deployments {
     ) 4>&1
 }
 
+read -p "Press enter to proceed with the <$OLD_MANAGER_VER --> $NEW_MANAGER_VER> migration."
 download_all_blueprints
 update_and_upload_all_blueprints
 create_deployments
 if $UPDATE_HOSTS_SOFTWARE; then
-    $BASE_DIR/migrate_agents.sh -n $MAX_ATTEMPTS uninstall 3.1 $OLD_CLI_PYTHON_VIRTENV $OLD_CLI_DIR $AUTHENTICATION_DATA_OVERRIDE_PATH
+    $BASE_DIR/migrate_agents.sh -n $MAX_ATTEMPTS uninstall $OLD_MANAGER_VER $OLD_CLI_PYTHON_VIRTENV $OLD_CLI_DIR $AUTHENTICATION_DATA_OVERRIDE_PATH
     if ! $BASE_DIR/print_failed_tasks.sh -w hosts_software_uninstall $OLD_CLI_PYTHON_VIRTENV $OLD_CLI_DIR; then
         echo 'Failure during agent uninstallation process detected.'
         echo -n 'Make sure that agents were uninstalled properly and '
@@ -140,7 +135,7 @@ if $UPDATE_HOSTS_SOFTWARE; then
     if $MIGRATE_INFLUXDB_DATA; then
         $BASE_DIR/migrate_metrics.sh $OLD_CLI_PYTHON_VIRTENV $OLD_CLI_DIR $NEW_CLI_PYTHON_VIRTENV $NEW_CLI_DIR
     fi
-    $BASE_DIR/migrate_agents.sh -n $MAX_ATTEMPTS install 3.2 $NEW_CLI_PYTHON_VIRTENV $NEW_CLI_DIR $AUTHENTICATION_DATA_OVERRIDE_PATH
+    $BASE_DIR/migrate_agents.sh -n $MAX_ATTEMPTS install $NEW_MANAGER_VER $NEW_CLI_PYTHON_VIRTENV $NEW_CLI_DIR $AUTHENTICATION_DATA_OVERRIDE_PATH
     if ! $BASE_DIR/print_failed_tasks.sh -w hosts_software_install $NEW_CLI_PYTHON_VIRTENV $NEW_CLI_DIR; then
         echo 'Failure during agent installation process detected.'
         exit 1

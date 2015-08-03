@@ -44,7 +44,7 @@ with open(os.devnull, 'w') as FNULL:
             )[0]
             call(['cfy', 'ssh', '-c', update_exec_workflow_id_template.format(
                 execution_id=create_dep_execution.id,
-                w_id='create_deployment_environment_3.2'
+                w_id='create_deployment_environment_' + os.environ['NEW_MANAGER_VER']
             )], stdout=FNULL, stderr=FNULL)
 
             print 'Recreated deployment %s' % (new_dep['id'],)
