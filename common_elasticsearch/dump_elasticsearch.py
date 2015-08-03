@@ -1,14 +1,11 @@
 import json
-import re
 import sys
 from subprocess import check_output
 
-dep_id = sys.argv[1]
-chunk_size = '100'
-if len(sys.argv) > 2:
-    chunk = sys.argv[2]
+CHUNK_SIZE = 100
 
-ichunk_size = int(chunk_size)
+dep_id = sys.argv[1]
+
 magic_path = '/tmp/cloudify_migration_data_storage_3f53t9'
 magic_path2 = '/tmp/cloudify_migration_data_events_3f53t9'
 
@@ -30,15 +27,15 @@ def get_chunk(cmd):
 
 
 def remove_newlines(s):
-    return s.replace('\n', ' ').replace('\r', '')
+    return s.replace('\n', '').replace('\r', '')
 
 
 def convert_to_bulk(chunk):
     def get_source(n):
-        source = json.dumps(n['_source'])
-        if n['_type'] == 'execution':
-            source = re.sub(r'/3\.1/', r'/3.2/', source)
-        return source
+        source = n['_source']
+        if n['_type'] == 'execution' and 'is_system_workflow' not in source:
+            source['is_system_workflow'] = False
+        return json.dumps(source)
 
     return ''.join([bulk_entry_template.format(
         id=str(n['_id']),
@@ -52,16 +49,16 @@ def append_to_file(f, js):
 
 
 def dump_chunks(f, template):
-    cmd = template.format(id=dep_id, start='0', size=chunk_size)
+    cmd = template.format(id=dep_id, start='0', size=str(CHUNK_SIZE))
     js = json.loads(get_chunk(cmd))
     append_to_file(f, js)
     total = int(js['hits']['total'])
-    if total > ichunk_size:
-        for i in xrange(ichunk_size, total, ichunk_size):
+    if total > CHUNK_SIZE:
+        for i in xrange(CHUNK_SIZE, total, CHUNK_SIZE):
             cmd = dump_storage_template.format(
                     id=dep_id,
                     start=str(i),
-                    size=chunk_size)
+                    size=str(CHUNK_SIZE))
             js = json.loads(get_chunk(cmd))
             append_to_file(f, js)
 
