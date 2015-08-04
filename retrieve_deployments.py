@@ -35,6 +35,5 @@ call(['cfy', 'ssh', '-c', del_files.format(magic_path, magic_path2)])
 
 # These statements have to be executed as last.
 # Send the data to another script, running in a different virtenv
-result_f = os.fdopen(3, 'w')
-result_f.write(json.dumps(deployments))
-result_f.close()
+with os.fdopen(3, 'w') as result_f:
+    result_f.write(json.dumps(deployments))
