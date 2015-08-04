@@ -71,5 +71,9 @@ with open(os.devnull, 'w') as FNULL:
         while execution.status not in Execution.END_STATES:
             time.sleep(1)
             execution = client.executions.get(execution_id)
-        print 'Execution {0} finished.'.format(execution_id)
+        if execution.status != Execution.TERMINATED:
+            print 'Execution {0} failed.'.format(execution_id)
+            sys.exit(1)
+        else:
+            print 'Execution {0} finished.'.format(execution_id)
 print 'Deployments migrated.'
