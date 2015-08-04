@@ -11,7 +11,7 @@ function cleanup {
 trap cleanup EXIT
 
 function usage_exit {
-    error "Usage: $SCRIPT_NAME [-d deployment_id] [-n attempts_limit] (install|uninstall) (3.1|3.2|3.2.1) cli_venv cli_dir [auth_config]" 1
+    error "Usage: $SCRIPT_NAME [-d deployment_id] [-n attempts_limit] (install|uninstall) (3.1|3.2|3.2.1|auto) cli_venv cli_dir [auth_config]" 1
 }
 
 #$1 - manager virtualenv path - it depends on version
@@ -69,7 +69,32 @@ case $1 in
         ;;
 esac
 
-case $2 in
+VENV_PATH=$(absolute_path $3)
+CLOUDIFY_PATH=$(absolute_path $4)
+
+if [[ $# -gt 4 ]]; then
+    AUTH_CONFIG_PATH=$(absolute_path $5)
+else
+    # creating empty dummy config file for simplicity:
+    AUTH_CONFIG_PATH=$(mktemp)
+    DELETE_AUTH_CONFIG_PATH=$AUTH_CONFIG_PATH
+fi
+
+activate_cli $CLOUDIFY_PATH $VENV_PATH
+
+VERSION=$2
+if [[ "$VERSION" == "auto" ]]; then
+    VERSION=$(get_manager_version)
+fi
+
+EXPECTED_VERSION=$(get_manager_version)
+if [ "$VERSION" != "$EXPECTED_VERSION" ]; then
+    DECL_MSG="Declared manager version: ${VERSION}."
+    REAL_MSG="Real manager version: ${EXPECTED_VERSION}."
+    error "Wrong manager version supplied. $DECL_MSG $REAL_MSG" 1
+fi
+
+case $VERSION in
     3.1)
         RUNNER=run_on_manager.sh
         MANAGER_VENV=/opt/manager
@@ -79,25 +104,15 @@ case $2 in
         MANAGER_VENV=/opt/manager/env
         ;;
     *)
+        echo "Unsupported version: $VERSION"
         usage_exit
         ;;
 esac
-
-VENV_PATH=$(absolute_path $3)
-CLOUDIFY_PATH=$(absolute_path $4)
-if [[ $# -gt 4 ]]; then
-    AUTH_CONFIG_PATH=$(absolute_path $5)
-else
-    # creating empty dummy config file for simplicity:
-    AUTH_CONFIG_PATH=$(mktemp)
-    DELETE_AUTH_CONFIG_PATH=$AUTH_CONFIG_PATH
-fi
 
 echo "Preparing operation script"
 SCRIPT_PATH=$(mktemp)
 prepare_agents_script $MANAGER_VENV $OPERATION $AUTH_CONFIG_PATH $SCRIPT_PATH $MAX_ATTEMPTS $DEPLOYMENT_ID
 echo "Operation script prepared, running operation $OPERATION"
-activate_cli $CLOUDIFY_PATH $VENV_PATH
 supplement_credentials $2
 run_operation $SCRIPT_PATH $RUNNER
 echo "Operation $OPERATION completed"
