@@ -69,7 +69,7 @@ with open(os.devnull, 'w') as FNULL:
         print 'Waiting for execution {0}.'.format(execution_id)
         execution = client.executions.get(execution_id)
         while execution.status not in Execution.END_STATES:
-            time.sleep(1)
+            time.sleep(2)
             execution = client.executions.get(execution_id)
         if execution.status != Execution.TERMINATED:
             print 'Execution {0} failed.'.format(execution_id)
