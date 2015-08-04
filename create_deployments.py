@@ -30,28 +30,27 @@ update_exec_workflow_id_template = (
 
 with open(os.devnull, 'w') as FNULL:
     create_deployment_executions = []
-    if deployments:
-        for dep in deployments:
-            new_dep = client.deployments.create(
-                dep['blueprint_id'],
-                dep['id'],
-                dep['inputs']
-            )
+    for dep in deployments:
+        new_dep = client.deployments.create(
+            dep['blueprint_id'],
+            dep['id'],
+            dep['inputs']
+        )
 
-            del_command = del_template.format(dep['id'])
-            call(['cfy', 'ssh', '-c', del_command],
-                 stdout=FNULL, stderr=FNULL)
+        del_command = del_template.format(dep['id'])
+        call(['cfy', 'ssh', '-c', del_command],
+             stdout=FNULL, stderr=FNULL)
 
-            create_dep_execution = client.executions.list(
-                deployment_id=new_dep.id
-            )[0]
-            create_deployment_executions.append(create_dep_execution.id)
-            call(['cfy', 'ssh', '-c', update_exec_workflow_id_template.format(
-                execution_id=create_dep_execution.id,
-                w_id='create_deployment_environment_' + os.environ['NEW_MANAGER_VER']
-            )], stdout=FNULL, stderr=FNULL)
+        create_dep_execution = client.executions.list(
+            deployment_id=new_dep.id
+        )[0]
+        create_deployment_executions.append(create_dep_execution.id)
+        call(['cfy', 'ssh', '-c', update_exec_workflow_id_template.format(
+            execution_id=create_dep_execution.id,
+            w_id='create_deployment_environment_' + os.environ['NEW_MANAGER_VER']
+        )], stdout=FNULL, stderr=FNULL)
 
-            print 'Recreated deployment %s' % (new_dep['id'],)
+        print 'Recreated deployment %s' % (new_dep['id'],)
 
     scp(host_magic_dir + 'migration_deps_storage', magic_file, True)
     call(['cfy', 'ssh', '-c',  bulk_template.format(
