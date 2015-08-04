@@ -1,9 +1,11 @@
 import json
 import os
 import sys
+import time
 from subprocess import call
 
 from cloudify_cli import utils
+from cloudify_rest_client.executions import Execution
 from scp import scp
 
 
@@ -27,6 +29,7 @@ update_exec_workflow_id_template = (
 
 
 with open(os.devnull, 'w') as FNULL:
+    create_deployment_executions = []
     if deployments:
         for dep in deployments:
             new_dep = client.deployments.create(
@@ -42,6 +45,7 @@ with open(os.devnull, 'w') as FNULL:
             create_dep_execution = client.executions.list(
                 deployment_id=new_dep.id
             )[0]
+            create_deployment_executions.append(create_dep_execution.id)
             call(['cfy', 'ssh', '-c', update_exec_workflow_id_template.format(
                 execution_id=create_dep_execution.id,
                 w_id='create_deployment_environment_' + os.environ['NEW_MANAGER_VER']
@@ -61,4 +65,15 @@ with open(os.devnull, 'w') as FNULL:
         index='cloudify_events'
         )], stdout=FNULL, stderr=FNULL)
 
+    for execution_id in create_deployment_executions:
+        print 'Waiting for execution {0}.'.format(execution_id)
+        execution = client.executions.get(execution_id)
+        while execution.status not in Execution.END_STATES:
+            time.sleep(2)
+            execution = client.executions.get(execution_id)
+        if execution.status != Execution.TERMINATED:
+            print 'Execution {0} failed.'.format(execution_id)
+            sys.exit(1)
+        else:
+            print 'Execution {0} finished.'.format(execution_id)
 print 'Deployments migrated.'
