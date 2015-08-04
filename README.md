@@ -86,10 +86,10 @@ Parameters and flags:
 
     manager
         3.1, 3.2, 3.2.1 or auto
-        If `auto` version is specified script will choose version automatically,
-        basing on information retrieved from manager itself.
+        If `auto` version is specified, script will detect version automatically,
+        based on information retrieved from the manager itself.
         If you specify version manually, script will perform a check to make sure
-        that this version is the same as manager's version.
+        that this version is the same as the manager's version.
 
     managers_cli_venv
         Python virtualenv directory used by the CLI initialized to operate the manager
