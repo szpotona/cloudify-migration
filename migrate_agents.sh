@@ -83,14 +83,14 @@ fi
 activate_cli $CLOUDIFY_PATH $VENV_PATH
 
 VERSION=$2
+DETECTED_VERSION=$(get_manager_version)
 if [[ "$VERSION" == "auto" ]]; then
-    VERSION=$(get_manager_version)
+    VERSION=$DETECTED_VERSION
 fi
 
-EXPECTED_VERSION=$(get_manager_version)
-if [ "$VERSION" != "$EXPECTED_VERSION" ]; then
+if [ "$VERSION" != "$DETECTED_VERSION" ]; then
     DECL_MSG="Declared manager version: ${VERSION}."
-    REAL_MSG="Real manager version: ${EXPECTED_VERSION}."
+    REAL_MSG="Real manager version: ${DETECTED_VERSION}."
     error "Wrong manager version supplied. $DECL_MSG $REAL_MSG" 1
 fi
 
