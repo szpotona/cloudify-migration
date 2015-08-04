@@ -8,7 +8,7 @@ BASE_DIR=$(dirname $(readlink -e $0))
 . $BASE_DIR/common.sh
 
 function usage {
-    echo "Usage: $SCRIPT_NAME old_cli_venv old_cli_dir new_cli_venv new_cli_dir"
+    echo "Usage: $SCRIPT_NAME old_cli_venv old_cli_dir new_cli_venv new_cli_dir docker/nodocker"
 }
 
 if [[ $# != 4 ]]; then
@@ -19,21 +19,30 @@ fi
 perform_setup $1 $2 $3 $4
 
 function export_metrics {
-     activate_old_cli
-     cfy ssh -c "sudo tar -czf $OLD_MAGIC_PATH  /opt/influxdb/shared/data"
-     download_from_manager $HOST_MAGIC_PATH $OLD_MAGIC_PATH  
-     cfy ssh -c "rm -f $OLD_MAGIC_PATH &> /dev/null"
+    activate_old_cli
+    if [[ $OLD_MANAGER_VER == '3.1' ]]; then
+        cfy ssh -c "sudo tar -czf $OLD_MAGIC_PATH  /opt/influxdb/shared/data"
+    else
+        cd $BASE_DIR/common_metrics/export
+        tar -czf package.tar.gz run.sh
+        cd -
+        run_operation $BASE_DIR/common_metrics/export/package.tar.gz run_on_docker.sh
+        cfy ssh -c "sudo docker cp cfy:$OLD_MAGIC_PATH /tmp"
+        rm -f $BASE_DIR/common_metrics/export/package.tar.gz
+    fi
+
+    download_from_manager $HOST_MAGIC_PATH $OLD_MAGIC_PATH
+    cfy ssh -c "rm -f $OLD_MAGIC_PATH &> /dev/null"
 }
 
 function import_metrics {
     activate_new_cli
-    mv $HOST_MAGIC_PATH $BASE_DIR/common_metrics/$HOST_FILE
-    cd $BASE_DIR/common_metrics
-    tar -czf package.tar.gz  run.sh $HOST_FILE    
+    mv $HOST_MAGIC_PATH $BASE_DIR/common_metrics/import/$HOST_FILE
+    cd $BASE_DIR/common_metrics/import
+    tar -czf package.tar.gz  run.sh $HOST_FILE
     cd -
-    run_operation $BASE_DIR/common_metrics/package.tar.gz run_on_docker.sh
-    rm -f $HOST_MAGIC_PATH
-    rm -f $BASE_DIR/common_metrics/$HOST_FILE $BASE_DIR/common_metrics/package.tar.gz
+    run_operation $BASE_DIR/common_metrics/import/package.tar.gz run_on_docker.sh
+    rm -f $BASE_DIR/common_metrics/import/$HOST_FILE $BASE_DIR/common_metrics/import/package.tar.gz
 }
 
 export_metrics

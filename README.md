@@ -1,11 +1,11 @@
 # Cloudify Migration
 
-This repository contains `migrate.sh` script and some utilities/tools that ease the process of Cloudify's live migration from version 3.1 to version 3.2. Migrations between other versions might be supported in the future.
+This repository contains `migrate.sh` script and some utilities/tools that ease the process of Cloudify's live migration upgrades among versions 3.1, 3.2 and 3.2.1. Migrations between other versions might be supported in the future.
 
 ###Prerequisites:###
-The script's assumptions are that the new 3.2 manager is operational and that we have two CLI environments that can be used to manage our Cloudify managers (3.1 and 3.2).
+The script's assumptions are that the new manager is operational and that we have two CLI environments that can be used to manage both Cloudify managers.
 
-Moreover, the 3.2 manager should be able to access all applications' machines, for example by using the same ssh keys and being in the same network as the 3.1 manager.
+Moreover, the new manager should be able to access all applications' machines, for example by using the same ssh keys and being in the same network as the old manager.
 
 
 ###Migration consists of two phases:###
@@ -26,9 +26,9 @@ Parameters and flags:
         accomplished later by using `migrate_agents.sh` and `migrate_metrics.sh` scripts.
 
     -b
-        With this flag set the script suggests replacing strings 1.1 and 3.1 by 1.2 and 3.2
-        in the whole blueprint - a colored diff is displayed. The proposed modifications
-        are applied upon user's acceptance.
+        With this flag set, the script suggests replacing versions in links to yaml/zip
+        files in the whole blueprint - a colored diff is displayed. The proposed
+        modifications are applied upon user's acceptance.
 
     -m
         Migrate InfluxDB metrics. For this flag to work, flag `-a` must be set as well.
@@ -46,17 +46,17 @@ Parameters and flags:
         during agent migration. Check `migrate_agents.sh` description for more details.
 
     old_cli_virtenv_dir
-        Python virtualenv directory used by the CLI initialized to operate the 3.1 manager.
+        Python virtualenv directory used by the CLI initialized to operate the old manager.
 
     old_cli_dir
-        A directory where the CLI for the 3.1 manager has been initialized.
+        A directory where the CLI for the old manager has been initialized.
         It should contain the .cloudify directory.
 
     new_cli_virtenv_dir
-        Python virtualenv directory used by the CLI initialized to operate the 3.1 manager.
+        Python virtualenv directory used by the CLI initialized to operate the old manager.
 
     new_cli_dir
-        A directory where the cfy for the 3.2 manager has been initialized.
+        A directory where the cfy for the new manager has been initialized.
         It should contain the .cloudify directory.
 
 
@@ -85,7 +85,7 @@ Parameters and flags:
         install or uninstall
 
     manager
-        3.1 or 3.2
+        3.1, 3.2 or 3.2.1
 
     managers_cli_venv
         Python virtualenv directory used by the CLI initialized to operate the manager
@@ -142,9 +142,9 @@ Parameters and flags:
 
 ###Tips:###
 
-Should the migration process fail, you can always recover the 3.1 manager by restoring the Cloudify software on all host-agents machines. It can be achieved by running the following command:
+Should the migration process fail, you can always recover the old manager by restoring the Cloudify software on all host-agents machines. It can be achieved by running a command similar to the following one:
 
 `./migrate_agents.sh install 3.1 old_cli_virtenv_dir old_cli_dir`
 
 Doing so is reasonable only if the Cloudify components have been effectively uninstalled on host-agents machines.
-Otherwise the 3.1 manager should be consistent and ready to work with without performing any recovery actions.
+Otherwise the old manager should be consistent and ready to work with without performing any recovery actions.
