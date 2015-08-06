@@ -55,7 +55,7 @@ def dump_chunks(f, template):
     total = int(js['hits']['total'])
     if total > CHUNK_SIZE:
         for i in xrange(CHUNK_SIZE, total, CHUNK_SIZE):
-            cmd = dump_storage_template.format(
+            cmd = template.format(
                     id=dep_id,
                     start=str(i),
                     size=str(CHUNK_SIZE))
