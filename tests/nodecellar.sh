@@ -35,7 +35,7 @@ cfy executions start -d $DEPLOYMENT_NAME -w install
 yes | $BASE_DIR/migrate.sh -a -b -m $1 $2 $3 $4 # TODO: get rid of "yes" by customization
 
 activate_new_cli
-python $BASE_DIR/tests/utils/check_deployments_after_migration.py $BLUEPRINT_NAME $DEPLOYMENT_NAME
+python $BASE_DIR/tests/utils/verify_state_after_migration.py $BLUEPRINT_NAME $DEPLOYMENT_NAME
 
 # Clear both managers
 (activate_old_cli; clear_manager) &
