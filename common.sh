@@ -95,8 +95,7 @@ function resolve_managers_versions {
 # Takes one parameter (for example 3.1) - version of the manager whose credentials should be established
 # Appropriate CLI should be activated before calling this function
 function supplement_credentials {
-    local sentence='cfy ssh returns 0 even if it fails so we analyse captured output'
-    while [[ $(cfy ssh -c "echo $sentence") != *$sentence* ]]; do
+    while ! python $BASE_DIR/check_ssh_connection.py; do
         python $BASE_DIR/supplement_credentials.py $1
     done
 }
