@@ -6,3 +6,7 @@ function clear_manager {
 function create_inputs {
     python $BASE_DIR/tests/utils/create_inputs.py $1 261844b3-479c-5446-a2c4-1ea95d53b668 102 ubuntu
 }
+
+if [[ ! $USER_INPUT ]]; then
+    USER_INPUT=substitute_versions
+fi

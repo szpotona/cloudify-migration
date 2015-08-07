@@ -34,13 +34,12 @@ find $REPO_DIR -name "*blueprint*yaml" | grep -v openstack-blueprint | while rea
 activate_old_cli
 cfy blueprints upload -b $BLUEPRINT_ID -p $BLUEPRINT
 cfy deployments create -b $BLUEPRINT_ID -d $DEPLOYMENT_ID -i $INPUTS_FILE
-sleep 1 # Sometimes a strange bug pops up, it needs investigation (create_dep_env not found)
+sleep 1 # There is a bug in 3.1, which can lead to races here (ES data)
 cfy executions start -d $DEPLOYMENT_ID -w install
 
 verify_nodecellar_is_up
 
-# TODO: get rid of "yes" by adding some customization options
-yes | $BASE_DIR/migrate.sh -a -b -m $OLD_CLI_PYTHON_VIRTENV $OLD_CLI_DIR $NEW_CLI_PYTHON_VIRTENV $NEW_CLI_DIR
+bash $BASE_DIR/tests/user_inputs/$USER_INPUT | $BASE_DIR/migrate.sh -a -b -m $OLD_CLI_PYTHON_VIRTENV $OLD_CLI_DIR $NEW_CLI_PYTHON_VIRTENV $NEW_CLI_DIR
 
 activate_new_cli
 python $BASE_DIR/tests/utils/verify_state_after_migration.py $BLUEPRINT_ID $DEPLOYMENT_ID
