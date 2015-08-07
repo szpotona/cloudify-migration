@@ -10,9 +10,12 @@ def main(blueprint_id, deployment_id):
     management_ip = utils.get_management_server_ip()
     client = utils.get_rest_client(management_ip)
 
+    print 'Verifying that blueprint and deployment got migrated'
     client.blueprints.get(blueprint_id=blueprint_id)    # exceptions are raised
     client.deployments.get(deployment_id=deployment_id) # if no objects found
 
+    print 'Verifying that "old" and "new" '\
+          'create_deployment_environment executions exist'
     executions = client.executions.list(deployment_id=deployment_id)
     assert execution_by_wf_id(executions, 'create_deployment_environment'), \
            "create_deployment_environment has not been migrated"
