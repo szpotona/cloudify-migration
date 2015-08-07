@@ -46,8 +46,8 @@ python $BASE_DIR/tests/utils/verify_state_after_migration.py $BLUEPRINT_ID $DEPL
 verify_nodecellar_is_up
 
 echo Clearing both managers
-(activate_old_cli; clear_manager) &
-clear_manager
+(activate_old_cli; clear_manager skip_uninstall true) &
+clear_manager uninstall false
 $BASE_DIR/print_failed_tasks.sh -w uninstall $NEW_CLI_PYTHON_VIRTENV $NEW_CLI_DIR
 wait
 echo "Test passed"

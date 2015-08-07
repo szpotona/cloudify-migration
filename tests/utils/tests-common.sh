@@ -1,6 +1,6 @@
 
 function clear_manager {
-    python $BASE_DIR/tests/utils/clear_manager.py
+    python $BASE_DIR/tests/utils/clear_manager.py "$@"
 }
 
 function create_inputs {

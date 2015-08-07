@@ -1,3 +1,4 @@
+import sys
 import time
 from cloudify_cli import utils
 from cloudify_rest_client.executions import Execution
@@ -6,22 +7,28 @@ from cloudify_rest_client.executions import Execution
 management_ip = utils.get_management_server_ip()
 client = utils.get_rest_client(management_ip)
 deployments = client.deployments.list()
+perform_uninstall = sys.argv[1] == 'uninstall'
+ignore_live_nodes = sys.argv[2] == 'true'
 
 
-uninstall_executions = []
+if perform_uninstall:
+    uninstall_executions = []
+    for deployment in deployments:
+        ex = client.executions.start(deployment.id, 'uninstall')
+        uninstall_executions.append(ex)
+
+    for uninstall_ex in uninstall_executions:
+        execution = client.executions.get(uninstall_ex.id)
+        while execution.status not in Execution.END_STATES:
+            time.sleep(5)
+            execution = client.executions.get(execution.id)
+
+
 for deployment in deployments:
-    ex = client.executions.start(deployment.id, 'uninstall')
-    uninstall_executions.append(ex)
-
-for uninstall_ex in uninstall_executions:
-    execution = client.executions.get(uninstall_ex.id)
-    while execution.status not in Execution.END_STATES:
-        time.sleep(5)
-        execution = client.executions.get(execution.id)
-
-
-for deployment in deployments:
-    client.deployments.delete(deployment.id)
+    client.deployments.delete(
+        deployment.id,
+        ignore_live_nodes=ignore_live_nodes
+    )
 
 
 # There is some kind of problem to investigate,
