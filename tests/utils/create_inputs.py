@@ -11,9 +11,9 @@ def main(output_f, image, flavor, agent_user):
                 'agent_user': agent_user
             }))
         else:
-            f.write("image: '%s'" % image)
-            f.write("flavor: '%s'" % flavor)
-            f.write("agent_user: '%s'" % agent_user)
+            f.write("image: '%s'\n" % image)
+            f.write("flavor: '%s'\n" % flavor)
+            f.write("agent_user: '%s'\n" % agent_user)
 
 
 if __name__ == '__main__':

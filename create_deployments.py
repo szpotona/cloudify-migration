@@ -65,7 +65,7 @@ with open(os.devnull, 'w') as FNULL:
         )], stdout=FNULL, stderr=FNULL)
 
     for execution_id in create_deployment_executions:
-        print 'Waiting for execution {0}.'.format(execution_id)
+        print 'Waiting for execution {0}'.format(execution_id)
         execution = client.executions.get(execution_id)
         while execution.status not in Execution.END_STATES:
             time.sleep(2)

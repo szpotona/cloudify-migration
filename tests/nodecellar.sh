@@ -39,13 +39,14 @@ cfy executions start -d $DEPLOYMENT_ID -w install
 
 verify_nodecellar_is_up
 
-yes | $BASE_DIR/migrate.sh -a -b -m $1 $2 $3 $4 # TODO: get rid of "yes" by customization
+# TODO: get rid of "yes" by adding some customization options
+yes | $BASE_DIR/migrate.sh -a -b -m $OLD_CLI_PYTHON_VIRTENV $OLD_CLI_DIR $NEW_CLI_PYTHON_VIRTENV $NEW_CLI_DIR
 
 activate_new_cli
 python $BASE_DIR/tests/utils/verify_state_after_migration.py $BLUEPRINT_ID $DEPLOYMENT_ID
 verify_nodecellar_is_up
 
-# Clear both managers
+echo Clearing both managers
 (activate_old_cli; clear_manager) &
 clear_manager
 $BASE_DIR/print_failed_tasks.sh -w uninstall $NEW_CLI_PYTHON_VIRTENV $NEW_CLI_DIR
