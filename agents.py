@@ -117,6 +117,16 @@ class ListAgents(Command):
             res[deployment.id] = {'agents': dep_res}
         _output(config, res)
 
+def _fill_deployments_alive(deployments):
+    all_alive = True
+    for deployment_id, agents in deployments.iteritems():
+        alive = agents['workflows_worker_alive'] and agents['operations_worker_alive']
+        for name, agent in agents['agents'].iteritems():
+            alive = alive and agent['alive']
+        agents['deployment_alive'] = alive
+        all_alive = all_alive and alive
+    return all_alive
+
 class CheckAgents(Command):
     
     @property
@@ -132,18 +142,21 @@ class CheckAgents(Command):
         with open(config.input) as f:
             # Mainly for validation purposes:
             agents = json.loads(f.read())
-        handler.put_resource(
+        handler.send_file(
             _get_agents_resource('validate_agents.py'),
-            'validate_agents.py')
+            '/tmp/validate_agents.py')
         target_file = '/tmp/_agents.json'
         result_file = '/tmp/_result.json'
         handler.send_file(config.input, target_file)
-        handler.python_call('/opt/manager/resources/validate_agents.py '
+        handler.python_call('/tmp/validate_agents.py '
                             '{0} {1}'.format(target_file, result_file))
         handler.load_file(result_file, result_file)
         with open(result_file) as f:
             res = json.loads(f.read())
+        all_alive = _fill_deployments_alive(res)
         _output(config, res)
+        if not all_alive:
+            raise RuntimeError('There are deployments that seems to be dead')
 
 
 class CheckSSH(Command):

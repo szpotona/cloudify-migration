@@ -21,12 +21,11 @@ def _check_alive(name):
         return False
 
 
-result = {}
 for deployment_id, agents in deployments.iteritems():
     agents['workflows_worker_alive'] = _check_alive(
         '{0}_workflows'.format(deployment_id))
     agents['operations_worker_alive'] = _check_alive(deployment_id)
-    for name, agent in agents['agents'].iteritems():
+    for name, agent in agents.get('agents', {}).iteritems():
        agent['alive'] = _check_alive(name)
 
 
