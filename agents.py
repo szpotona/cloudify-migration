@@ -1,6 +1,5 @@
 import argparse
 import json
-import sys
 
 from cloudify_cli.utils import get_rest_client
 from cloudify_cli.logger import configure_loggers
@@ -8,6 +7,7 @@ from cloudify_cli.logger import configure_loggers
 
 import os
 import sys
+import logging
 from distutils import spawn
 from cloudify_cli.utils import get_management_user
 from cloudify_cli.utils import get_management_server_ip
@@ -18,6 +18,8 @@ from subprocess import call
 
 _DIRECTORY = os.path.dirname(os.path.realpath(__file__))
 
+logger = logging.getLogger()
+logger.addHandler(logging.StreamHandler(sys.stderr))
 
 def _get_agents_resource(resource):
     return os.path.join(_DIRECTORY, 'agents', resource)
@@ -74,6 +76,10 @@ class Command(object):
         pass
 
 
+def _read_input(config):
+    with open(config.input) as f:
+        return json.loads(f.read())
+
 def _output(config, res):
     if config.output:
         with open(config.output, 'w') as out:
@@ -81,6 +87,13 @@ def _output(config, res):
     else:
         print json.dumps(res, indent=2)
      
+
+def _get_deployments(client, config):
+    if config.deployment_id:
+        deployments = [client.deployments.get(deployment_id=config.deployment_id)]
+    else:
+        deployments = client.deployments.list()
+    return deployments 
 
 
 class ListAgents(Command):
@@ -98,10 +111,7 @@ class ListAgents(Command):
         client = get_rest_client()
         version = client.manager.get_version()['version']
         res = {}
-        if config.deployment_id:
-            deployments = [client.deployments.get(deployment_id=config.deployment_id)]
-        else:
-            deployments = client.deployments.list()
+        deployments = _get_deployments(client, config)
         for deployment in deployments:
             dep_res = {}
             for node in client.nodes.list(deployment_id=deployment.id):
@@ -117,6 +127,7 @@ class ListAgents(Command):
             res[deployment.id] = {'agents': dep_res}
         _output(config, res)
 
+
 def _fill_deployments_alive(deployments):
     all_alive = True
     for deployment_id, agents in deployments.iteritems():
@@ -126,6 +137,7 @@ def _fill_deployments_alive(deployments):
         agents['deployment_alive'] = alive
         all_alive = all_alive and alive
     return all_alive
+
 
 class CheckAgents(Command):
     
@@ -159,6 +171,76 @@ class CheckAgents(Command):
             raise RuntimeError('There are deployments that seems to be dead')
 
 
+
+class ListDeploymentsStates(Command):
+    
+    @property
+    def name(self):
+        return 'deployments_states'
+
+    def prepare_args(self, parser):
+        parser.add_argument('--input', required=False)
+        parser.add_argument('-d', help='Deployment id', dest='deployment_id')
+        parser.add_argument('--output')
+        parser.add_argument('--invalid-only', default=False, action='store_true')
+        parser.add_argument('--valid-only', default=False, action='store_true')
+
+    def perform(self, config):
+        client = get_rest_client()
+        version = client.manager.get_version()['version']
+        res = {}
+        if config.input:
+            res = _read_input(config)
+        else:
+            deployments = _get_deployments(client, config)
+            for deployment in deployments:
+                logger.info('Checking {0}'.format(deployment.id))
+                dep_states = set()
+                dep_agents = {}
+                for node in client.nodes.list(deployment_id=deployment.id):
+                    for node_instance in client.node_instances.list(deployment_id=deployment.id,
+                                                                    node_name=node.id):
+                        dep_states.add(node_instance.state)
+                        if 'cloudify.nodes.Compute' in node.type_hierarchy:
+                            dep_agents[node_instance.id] = {
+                                'state': node_instance.state,
+                                'version': version
+                            }
+ 
+
+                if len(dep_states) > 1:
+                    status = 'mixed'
+                elif len(dep_states) == 1:
+                    status = next(iter(dep_states))
+                else:
+                    status = 'empty'
+                res[deployment.id] = {
+                    'status': status,
+                    'agents': dep_agents,
+                    'ok': status in ['empty', 'started'],
+                    'states': list(dep_states)}
+        if config.invalid_only:
+            res = dict([ (k, v) for k, v in res.iteritems() if v['ok'] is False])
+        if config.valid_only:
+            res = dict([ (k, v) for k, v in res.iteritems() if v['ok'] is True])
+        _output(config, res)
+
+
+class ListDeadDeployments(Command):
+    
+    @property
+    def name(self):
+        return 'deployments_states'
+
+    def prepare_args(self, parser):
+        parser.add_argument('--input', required=True)
+        parser.add_argument('--output')
+
+    def perform(self, config):
+        deployments = _read_input(config)
+        _output(config, dict([ (k, v) for k, v in deps.iteritems() if v['ok'] is False]))
+
+       
 class CheckSSH(Command):
     
     @property
@@ -173,7 +255,8 @@ class CheckSSH(Command):
 _COMMANDS = [
   ListAgents,
   CheckAgents,
-  CheckSSH
+  CheckSSH,
+  ListDeploymentsStates
 ]
 
 def _parser():
