@@ -68,10 +68,12 @@ class ManagerHandler31(object):
 
 
 class Command(object):
+
     def prepare_parser(self, subparsers):
         subparser = subparsers.add_parser(self.name)
         self.prepare_args(subparser)
         subparser.set_defaults(func=self.perform)
+
     def prepare_args(self, parser):
         pass
 
@@ -204,7 +206,11 @@ class ListDeploymentsStates(Command):
                         if 'cloudify.nodes.Compute' in node.type_hierarchy:
                             dep_agents[node_instance.id] = {
                                 'state': node_instance.state,
-                                'version': version
+                                'version': version,
+                                'ip': node_instance.runtime_properties.get('ip', node.properties.get('ip', '')),
+                                'cloudify_agent': node.properties.get('cloudify_agent', {}),
+                                'is_windows': 'cloudify.openstack.nodes.WindowsServer' in node.type_hierarchy
+
                             }
  
 
@@ -226,19 +232,20 @@ class ListDeploymentsStates(Command):
         _output(config, res)
 
 
-class ListDeadDeployments(Command):
+class FilterDeployments(Command):
     
     @property
     def name(self):
-        return 'deployments_states'
+        return 'filter_deployments'
 
     def prepare_args(self, parser):
         parser.add_argument('--input', required=True)
         parser.add_argument('--output')
+        parser.add_argument('--field', required=True)
 
     def perform(self, config):
-        deployments = _read_input(config)
-        _output(config, dict([ (k, v) for k, v in deps.iteritems() if v['ok'] is False]))
+        deps = _read_input(config)
+        _output(config, dict([(k, v) for k, v in deps.iteritems() if v[config.field] is True]))
 
        
 class CheckSSH(Command):
@@ -256,8 +263,10 @@ _COMMANDS = [
   ListAgents,
   CheckAgents,
   CheckSSH,
-  ListDeploymentsStates
+  ListDeploymentsStates,
+  FilterDeployments
 ]
+
 
 def _parser():
     parser = argparse.ArgumentParser()
