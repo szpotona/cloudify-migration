@@ -18,8 +18,8 @@ from subprocess import call
 
 _DIRECTORY = os.path.dirname(os.path.realpath(__file__))
 
-logger = logging.getLogger()
-logger.addHandler(logging.StreamHandler(sys.stderr))
+def _std_err(msg):
+    sys.stderr.write('{}\n'.format(msg))
 
 def _get_agents_resource(resource):
     return os.path.join(_DIRECTORY, 'agents', resource)
@@ -78,9 +78,14 @@ class Command(object):
         pass
 
 
-def _read_input(config):
-    with open(config.input) as f:
+def _read(filename):
+    with open(filename) as f:
         return json.loads(f.read())
+
+
+def _read_input(config):
+    return _read(config.input)
+
 
 def _output(config, res):
     if config.output:
@@ -259,12 +264,111 @@ class CheckSSH(Command):
         handler.execute('echo "Executing test remote command"')
 
 
+def _has_multi_sec_nodes(blueprint):
+    types = {}
+    for node in blueprint.plan['nodes']:
+        types[node['name']] = node['type_hierarchy']
+    for node in blueprint.plan['nodes']:
+        name = node['name']
+        if 'cloudify.nodes.Compute' in types[name]:
+            connected_sec_groups = []
+            for relationship in node['relationships']:
+                target = relationship['target_id']
+                if 'cloudify.nodes.SecurityGroup' in types[target]:
+                    connected_sec_groups.append(target)
+            if len(connected_sec_groups) > 1:
+                return True
+    return False
+
+
+def _blueprints_with_multi_sec_group_nodes(client, blueprint_id):
+    if blueprint_id:
+        blueprints = [client.blueprints.get(blueprint_id=blueprint_id)]
+    else:
+        blueprints = client.blueprints.list()
+    result = []
+    for blueprint in blueprints:
+        if _has_multi_sec_nodes(blueprint):
+            result.append(blueprint.id)
+    return result 
+
+class Managers(Command):
+ 
+    @property
+    def name(self):
+        return 'managers'
+
+    def prepare_args(self, parser):
+        parser.add_argument('--input', required=True)
+        parser.add_argument('--skip-ips')
+        parser.add_argument('--name')
+        parser.add_argument('--output')
+        parser.add_argument('--multi_sec_blueprints', default=False, action='store_true')
+        parser.add_argument('--blueprint')
+
+    def perform(self, config):
+        managers = _read_input(config)
+        if config.skip_ips:
+            ips_to_skip = _read(config.skip_ips)
+        else:
+            ips_to_skip = []
+        result = {}
+        for name, value in managers.iteritems():
+            _std_err('Manager {}'.format(name))
+            manager_result = {}
+            for env_name, env in value['environments'].iteritems():
+                ip = env['config']['MANAGER_IP_ADDRESS']
+                _std_err('  Environment {} {}'.format(env_name, ip))
+                if ip in ips_to_skip:
+                    manager_result[env_name] = {
+                        'ip': ip,
+                        'deployments_count': '',
+                        'msg': 'skipped'
+                    }
+                else:
+                    client = get_rest_client(
+                        manager_ip=env['config']['MANAGER_IP_ADDRESS'])
+                    manager_result[env_name] = {
+                        'ip': ip,
+                        'deployments_count': len(client.deployments.list()),
+                        'blueprints_count': len(client.blueprints.list())
+                    }
+                    if config.multi_sec_blueprints:
+                        manager_result[env_name][
+                            'multi_sec_blueprints'] =_blueprints_with_multi_sec_group_nodes(client, config.blueprint)
+                result[name] = manager_result
+        _output(config, result)
+     
+class MultiSecBlueprintsToCsv(Command):
+
+    @property
+    def name(self):
+        return 'multi_sec_blueprints_to_csv'
+
+    def prepare_args(self, parser):
+        parser.add_argument('--input', required=True)
+        parser.add_argument('--output', required=True)
+
+    def perform(self, config):
+        managers = _read_input(config)
+        with open(config.output, 'w') as f:
+            for mngr_name, mngr in managers.iteritems():
+                for env_name, env in mngr.iteritems():
+                    for blueprint in env.get('multi_sec_blueprints', []):
+                        f.write('{0},{1},{2}\n'.format(
+                            mngr_name,
+                            env_name,
+                            blueprint))
+
+
 _COMMANDS = [
   ListAgents,
   CheckAgents,
   CheckSSH,
   ListDeploymentsStates,
-  FilterDeployments
+  FilterDeployments,
+  Managers,
+  MultiSecBlueprintsToCsv
 ]
 
 
