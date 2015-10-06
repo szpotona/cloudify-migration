@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import urllib
 import sys
 import threading
@@ -63,7 +64,49 @@ def _get_deployment_states(client, deployments):
     return res, agents_count
 
 
-def prepare_report(env, config):
+def _has_multi_sec_nodes(blueprint):
+    types = {}
+    for node in blueprint.plan['nodes']:
+        types[node['name']] = node['type_hierarchy']
+    for node in blueprint.plan['nodes']:
+        name = node['name']
+        if 'cloudify.nodes.Compute' in types[name]:
+            connected_sec_groups = []
+            for relationship in node['relationships']:
+                target = relationship['target_id']
+                if 'cloudify.nodes.SecurityGroup' in types[target]:
+                    connected_sec_groups.append(target)
+            if len(connected_sec_groups) > 1:
+                return True
+    return False
+
+def insert_blueprint_report(res, client, blueprint, deployments, config):
+    res['multi_sec_nodes'] = _has_multi_sec_nodes(blueprint)
+    deployments = [dep for dep in deployments if dep.blueprint_id == blueprint.id]
+    res['deployments_count'] = len(deployments)
+    if config.deployment_states:
+        res['deployments'], res['agents_count'] = _get_deployment_states(client, deployments)
+ 
+
+def _get_blueprints(client, blueprints, deployments, config):
+    threads = []
+    res = {}
+    for blueprint in blueprints:
+        res[blueprint.id] = {}
+        thread = threading.Thread(target=insert_blueprint_report,
+                                  args=(res[blueprint.id], client, blueprint, deployments, config))
+        thread.start()
+        threads.append(thread)
+    for thread in threads:
+        thread.join()
+    agents_count = 0
+    for name, blueprint_res in res.iteritems():
+        agents_count = agents_count + blueprint_res.get('agents_count', 0)
+    return res, agents_count
+
+
+
+def prepare_report(result, env, config):
     if env.get('inactive'):
         return {
             'inactive': True
@@ -71,29 +114,28 @@ def prepare_report(env, config):
     ip = env['config']['MANAGER_IP_ADDRESS']
     status = call(['timeout', '2', 'wget', ip, '-o', '/tmp/index.html'])
     if status:
-        return _ret_msg('Cant connect to manager')
+        result['msg'] = 'Cant connect to manager'
+        return
     client = get_rest_client(manager_ip=ip)
-    result = {}
     result['ip'] = ip
     result['version'] = client.manager.get_version()['version']
-    if config.deployment_states:
-        if config.deployment:
-            deployments = [client.deployments.get(deployment_id=config.deployment)]
+    if config.blueprints_states:
+        deployments = client.deployments.list()
+        if config.blueprint:
+            blueprints = [client.blueprints.get(blueprint_id=config.blueprint)]
         else:
-            deployments = client.deployments.list()
-        result['deployments'], result['agents_count'] = _get_deployment_states(client, deployments)
+            blueprints = client.blueprints.list()
+        result['blueprints'], result['agents_count'] = _get_blueprints(client, blueprints, deployments, config)
+        result['deployments_count'] = len(deployments)
+        result['blueprints_count'] = len(blueprints)
     return result 
 
 
 def insert_env_report(env_result, env, config):
     try:
-        report = prepare_report(env, config)
+        prepare_report(env_result, env, config)
     except Exception as e:
-        report = {
-            'error': 'Could not create report, cause: {0}'.format(str(e))
-        }
-    env_result['report'] = report
- 
+        env_result['error'] = 'Could not create report, cause: {0}'.format(str(e))
 
 
 def _output(config, res):
@@ -116,6 +158,8 @@ class Generate(Command):
         parser.add_argument('--output')
         parser.add_argument('--deployment')
         parser.add_argument('--deployment-states', default=False, action='store_true')
+        parser.add_argument('--blueprints-states', default=False, action='store_true')
+        parser.add_argument('--blueprint')
 
     def perform(self, config):
         tennants, _ = urllib.urlretrieve(_TENNANTS)
@@ -152,7 +196,18 @@ class Generate(Command):
             result[mgr_name] = mgr_result
         for thread in threads:
             thread.join()
-        _output(config, result)
+        res = {}
+        res['managers'] = result
+        agents_count = 0
+        blueprints_count = 0
+        deployments_count = 0
+        for key in ['agents_count', 'deployments_count', 'blueprints_count']:
+            val = 0
+            for manager in res['managers'].itervalues():
+                for env in manager.itervalues():
+                    val = val + env.get(key, 0)
+            res[key] = val
+        _output(config, res)
 
 
 _COMMANDS = [
