@@ -2,15 +2,24 @@ import argparse
 import json
 import os
 import urllib
+import uuid
 import sys
+import tempfile
 import threading
 from cloudify_cli.utils import get_rest_client
+
+from distutils import spawn
 from subprocess import call
 
 
 _DIRECTORY = os.path.dirname(os.path.realpath(__file__))
 _TENNANTS = "http://git.cloud.td.com/its-cloud/management-cluster/raw/master/bootstrap/tenants.json"
 _USER = 'cloudify'
+_MANAGER_KEY = '~/td/ga-cloudify-manager-kp.pem'
+
+
+def _get_agents_resource(resource):
+    return os.path.join(_DIRECTORY, 'agents', resource)
 
 
 class Command(object):
@@ -22,12 +31,6 @@ class Command(object):
 
     def prepare_args(self, parser):
         pass
-
-
-def _ret_msg(msg):
-    return {
-        'msg': msg
-    }
 
 
 def _get_deployment_states(client, deployments):
@@ -104,21 +107,147 @@ def _get_blueprints(client, blueprints, deployments, config):
         agents_count = agents_count + blueprint_res.get('agents_count', 0)
     return res, agents_count
 
+class RemoteFile():
 
+    def __init__(self, handler, local_path, target_path):
+        self.handler = handler
+        self.local_path = local_path
+        self.target_path = target_path
+    def __enter__(self):
+        self.handler.inject_file(self.local_path, self.target_path)
+    def __exit__(self, type, value, traceback):
+        self.handler.remove_file(self.target_path)
+
+
+class ManagerHandler(object):
+
+    def __init__(self, ip):
+        self.manager_ip = ip
+
+    def scp(self, local_path, path_on_manager, to_manager):
+        scp_path = spawn.find_executable('scp')
+        management_path = '{0}@{1}:{2}'.format(
+            _USER,
+            self.manager_ip,
+            path_on_manager
+        )
+        command = [scp_path, '-i', os.path.expanduser(_MANAGER_KEY)]
+        if to_manager:
+            command += [local_path, management_path]
+        else:
+            command += [management_path, local_path]
+        if call(command):
+            raise RuntimeError('Could not scp to/from manager')
+    def manager_file(self, local, target):
+        return RemoteFile(self, local, target)
+    def put_resource(self, source, resource):
+        tmp_file = '/tmp/_resource_file'
+        self.send_file(source, tmp_file)
+        self.execute('sudo cp {0} /opt/manager/resources/{1}'.format(
+            tmp_file, resource))
+
+    def send_file(self, source, target):
+        self.scp(source, target, True)
+
+    def load_file(self, source, target):
+        self.scp(target, source, False)
+
+    def execute(self, cmd, timeout=None):
+        ssh_cmd = ['ssh', '-o', 'StrictHostKeyChecking=no', '-i',
+            os.path.expanduser(_MANAGER_KEY), '{0}@{1}'.format(
+            _USER, self.manager_ip), '-C', cmd]
+        if timeout:
+            cmd_list = ["timeout", str(timeout)]
+            cmd_list.extend(ssh_cmd)
+        else:
+            cmd_list = ssh_cmd
+        result = call(cmd_list)
+        if result:
+            raise RuntimeError('Could not execute remote command "{0}"'.format(cmd))
+
+
+class ManagerHandler31(ManagerHandler):
+
+    def inject_file(self, source, target):
+        self.send_file(source, target)
+
+    def retrieve_file(self, source, target):
+        self.load_file(source, target)
+
+
+    def remove_file(self, path):
+        self.execute('rm {0}'.format(path))
+
+    def python_call(self, cmd):
+        self.execute('/opt/celery/cloudify.management__worker/env/bin/python {0}'.format(cmd))
+
+
+class ManagerHandler32(ManagerHandler):
+    
+    def inject_file(self, source, target):
+        temporary_file = '_tmp_file{0}'.format(uuid.uuid4())
+        self.send_file(source, '~/{0}'.format(temporary_file))
+        self.docker_execute('mv /tmp/home/{0} {1}'.format(temporary_file, target))
+
+    def retrieve_file(self, source, target):
+        temporary_file = '_tmp_file{0}'.format(uuid.uuid4())
+        self.docker_execute('cp {0} /tmp/home/{1}'.format(source, temporary_file))
+        self.load_file('~/{0}'.format(temporary_file), target)
+
+    def docker_execute(self, cmd):
+        self.execute('sudo docker exec cfy {0}'.format(cmd))
+
+    def remove_file(self, path):
+        self.docker_execute('rm {0}'.format(path))
+
+    def python_call(self, cmd):
+        self.docker_execute('/etc/service/celeryd-cloudify-management/env/bin/python {0}'.format(cmd))
+
+
+
+def _get_handler(version, ip):
+    if version.startswith('3.1'):
+        return ManagerHandler31(ip)
+    else:
+        return ManagerHandler32(ip)
+
+def _random_tmp_path():
+    return '/tmp/_tmp_migration_report_file{0}'.format(uuid.uuid4())
 
 def prepare_report(result, env, config):
-    if env.get('inactive'):
-        return {
-            'inactive': True
-        }
     ip = env['config']['MANAGER_IP_ADDRESS']
+    result['ip'] = ip
+    if env.get('inactive'):
+        result['inactive'] = True
+        return
     status = call(['timeout', '2', 'wget', ip, '-o', '/tmp/index.html'])
     if status:
         result['msg'] = 'Cant connect to manager'
         return
     client = get_rest_client(manager_ip=ip)
-    result['ip'] = ip
     result['version'] = client.manager.get_version()['version']
+    if config.test_manager_ssh:
+        handler = _get_handler(result['version'], ip)
+        try:
+            handler.execute('echo test > /dev/null', timeout=4)
+            tmp_file = _random_tmp_path()
+            result_file = _random_tmp_path()
+            content = str(uuid.uuid4())
+            with handler.manager_file(_get_agents_resource('validate_manager_env.py'), tmp_file):
+                handler.python_call('{0} {1} {2}'.format(tmp_file, result_file, content))
+                _, path = tempfile.mkstemp()
+                handler.retrieve_file(result_file, path)
+                handler.remove_file(result_file)
+                with open(path) as f:
+                    res = f.read()
+                    if res != content:
+                        raise RuntimeError(
+                            'Invalid result retrieved, expected {0}, got {1}'.format(
+                                content, res))
+            result['manager_ssh'] = True
+        except Exception as e:
+            result['manager_ssh'] = False
+            result['manager_ssh_error'] = str(e)
     if config.blueprints_states:
         deployments = client.deployments.list()
         if config.blueprint:
@@ -160,6 +289,8 @@ class Generate(Command):
         parser.add_argument('--deployment-states', default=False, action='store_true')
         parser.add_argument('--blueprints-states', default=False, action='store_true')
         parser.add_argument('--blueprint')
+        parser.add_argument('--test-manager-ssh', default=False, action='store_true')
+        parser.add_argument('--test-agents-alive', default=False, action='store_true')
 
     def perform(self, config):
         tennants, _ = urllib.urlretrieve(_TENNANTS)
@@ -198,9 +329,6 @@ class Generate(Command):
             thread.join()
         res = {}
         res['managers'] = result
-        agents_count = 0
-        blueprints_count = 0
-        deployments_count = 0
         for key in ['agents_count', 'deployments_count', 'blueprints_count']:
             val = 0
             for manager in res['managers'].itervalues():
