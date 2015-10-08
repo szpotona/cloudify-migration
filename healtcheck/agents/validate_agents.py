@@ -41,6 +41,9 @@ def _insert_deployment_result(dep_res, deployment_id, deployment):
         agent_alive = _check_alive(agent)
         dep_res['agents_alive'][agent] = agent_alive
         dep_alive = dep_alive and agent_alive
+    if not dep_alive:
+        return
+
 
 
 def _prepare_deployment_results(queue):

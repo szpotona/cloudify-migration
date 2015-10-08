@@ -15,9 +15,9 @@ from subprocess import call
 
 
 _DIRECTORY = os.path.dirname(os.path.realpath(__file__))
-_TENNANTS = "http://git.cloud.td.com/its-cloud/management-cluster/raw/master/bootstrap/tenants.json"
-_USER = 'cloudify'
-_MANAGER_KEY = '~/td/ga-cloudify-manager-kp.pem'
+_TENANTS = ''
+_USER = ''
+_MANAGER_KEY = ''
 
 
 def _read(filename):
@@ -25,8 +25,16 @@ def _read(filename):
         return json.loads(f.read())
 
 
-def _get_agents_resource(resource):
-    return os.path.join(_DIRECTORY, 'agents', resource)
+def set_globals(config):
+    conf = _read(config.config)
+    global _TENANTS
+    global _USER
+    global _MANAGER_KEY
+    _TENANTS = conf['tenants']
+    _USER = conf['user']
+    _MANAGER_KEY = conf['manager_key']    
+    if not _TENANTS or not _USER or not _MANAGER_KEY:
+        raise RuntimeError('Wrong configuration')
 
 
 class Command(object):
@@ -40,6 +48,10 @@ class Command(object):
         pass
 
 
+def _get_agents_resource(resource):
+    return os.path.join(_DIRECTORY, 'agents', resource)
+
+
 def _get_deployment_states(client, deployments):
     res = {}
     agents_count = 0
@@ -48,16 +60,22 @@ def _get_deployment_states(client, deployments):
         dep_states = set()
         dep_agents = {}
         for node in client.nodes.list(deployment_id=deployment.id):
-            for node_instance in client.node_instances.list(deployment_id=deployment.id,
-                                                            node_name=node.id):
+            for node_instance in client.node_instances.list(
+                    deployment_id=deployment.id, node_name=node.id):
                 dep_states.add(node_instance.state)
                 if 'cloudify.nodes.Compute' in node.type_hierarchy:
-                    dep_agents[node_instance.id] = {
+                    dep_agents[
+                        node_instance.id] = {
                         'state': node_instance.state,
-                        'ip': node_instance.runtime_properties.get('ip', node.properties.get('ip', '')),
-                        'cloudify_agent': node.properties.get('cloudify_agent', {}),
-                        'is_windows': 'cloudify.openstack.nodes.WindowsServer' in node.type_hierarchy
-                    }
+                        'ip': node_instance.runtime_properties.get(
+                            'ip',
+                            node.properties.get(
+                                'ip',
+                                '')),
+                        'cloudify_agent': node.properties.get(
+                            'cloudify_agent',
+                            {}),
+                        'is_windows': 'cloudify.openstack.nodes.WindowsServer' in node.type_hierarchy}
 
         if len(dep_states) > 1:
             status = 'mixed'
@@ -66,7 +84,8 @@ def _get_deployment_states(client, deployments):
         else:
             status = 'empty'
         agents_count += len(dep_agents)
-        executions = [(e.created_at, e.workflow_id) for e in client.executions.list(deployment_id=deployment.id)]
+        executions = [(e.created_at, e.workflow_id)
+                      for e in client.executions.list(deployment_id=deployment.id)]
         res[deployment.id] = {
             'status': status,
             'agents': dep_agents,
@@ -107,8 +126,8 @@ def _get_blueprints(client, blueprints, deployments, config):
     res = {}
     for blueprint in blueprints:
         res[blueprint.id] = {}
-        thread = threading.Thread(target=insert_blueprint_report,
-                                  args=(res[blueprint.id], client, blueprint, deployments, config))
+        thread = threading.Thread(target=insert_blueprint_report, args=(
+            res[blueprint.id], client, blueprint, deployments, config))
         thread.start()
         threads.append(thread)
     for thread in threads:
@@ -117,30 +136,6 @@ def _get_blueprints(client, blueprints, deployments, config):
     for name, blueprint_res in res.iteritems():
         agents_count = agents_count + blueprint_res.get('agents_count', 0)
     return res, agents_count
-
-
-class RemoteFile():
-
-    def __init__(self, handler, local_path, target_path=None):
-        if target_path is None:
-            target_path = _random_tmp_path()
-        self.handler = handler
-        self.local_path = local_path
-        self.target_path = target_path
-
-    def __enter__(self):
-        print 'creating file {0}'.format(self.target_path)
-        self.handler.inject_file(self.local_path, self.target_path)
-        return self.target_path
-
-    def __exit__(self, type, value, traceback):
-        print 'removing file {0}'.format(self.target_path)
-        try:
-            self.handler.remove_file(self.target_path)
-        except Exception as e:
-#            print str(e)
-#            print 'Remote file cleanup failed'
-            pass
 
 
 class LocalFile():
@@ -152,7 +147,7 @@ class LocalFile():
 
     def __enter__(self):
         _, self.target_path = tempfile.mkstemp()
-        self.handler.retrieve_file(self.remote_path, self.target_path)
+        self.handler.load_file(self.remote_path, self.target_path)
         return self.target_path
 
     def __exit__(self, type, value, traceback):
@@ -180,17 +175,8 @@ class ManagerHandler(object):
             raise RuntimeError(
                 'Could not scp to/from manager: {0}'.format(command))
 
-    def manager_file(self, local, target=None):
-        return RemoteFile(self, local, target)
-
     def local_file(self, remote):
         return LocalFile(self, remote)
-
-    def put_resource(self, source, resource):
-        tmp_file = '/tmp/_resource_file'
-        self.send_file(source, tmp_file)
-        self.execute('sudo cp {0} /opt/manager/resources/{1}'.format(
-            tmp_file, resource))
 
     def send_file(self, source, target):
         self.scp(source, target, True)
@@ -212,17 +198,11 @@ class ManagerHandler(object):
             raise RuntimeError(
                 'Could not execute remote command "{0}"'.format(cmd))
 
+    def files(self):
+        return FileManager(self)
+
 
 class ManagerHandler31(ManagerHandler):
-
-    def inject_file(self, source, target):
-        self.send_file(source, target)
-
-    def retrieve_file(self, source, target):
-        self.load_file(source, target)
-
-    def remove_file(self, path):
-        self.execute('rm {0}'.format(path))
 
     def python_call(self, cmd):
         self.execute(
@@ -231,26 +211,14 @@ class ManagerHandler31(ManagerHandler):
     def call(self, cmd):
         self.execute(cmd)
 
+    def container_path(self, directory, filename):
+        return '~/{0}/{1}'.format(directory, filename)
+
+
 class ManagerHandler32(ManagerHandler):
 
-    def inject_file(self, source, target):
-        temporary_file = '_tmp_file{0}'.format(uuid.uuid4())
-        self.send_file(source, '~/{0}'.format(temporary_file))
-        self.docker_execute(
-            'mv /tmp/home/{0} {1}'.format(temporary_file, target))
-
-    def retrieve_file(self, source, target):
-        temporary_file = '_tmp_file{0}'.format(uuid.uuid4())
-        self.docker_execute(
-            'cp {0} /tmp/home/{1}'.format(source, temporary_file))
-        self.load_file('~/{0}'.format(temporary_file), target)
-        self.remove_file('/tmp/home/{0}'.format(temporary_file))
-
-    def docker_execute(self, cmd, timeout=None):
-        self.execute('sudo docker exec cfy {0}'.format(cmd), timeout)
-
-    def remove_file(self, path):
-        self.docker_execute('rm {0}'.format(path), timeout=10)
+    def docker_execute(self, cmd):
+        self.execute('sudo docker exec cfy {0}'.format(cmd))
 
     def python_call(self, cmd):
         self.docker_execute(
@@ -259,15 +227,44 @@ class ManagerHandler32(ManagerHandler):
     def call(self, cmd):
         self.docker_execute(cmd)
 
+    def container_path(self, directory, filename):
+        return '/tmp/home/{0}/{1}'.format(directory, filename)
+
+
+class FileManager(object):
+
+    def __init__(self, handler):
+        self.handler = handler
+        self.directory = 'migration-report-data_{0}'.format(uuid.uuid4())
+        self.path = '~/{0}'.format(self.directory)
+
+    def __enter__(self):
+        self.handler.execute('mkdir {0}'.format(self.path))
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.handler.execute('rm -rf {0}'.format(self.path))
+
+    def filename(self):
+        return '_tmp_file{0}'.format(uuid.uuid4())
+
+    def send(self, path):
+        filename = self.filename()
+        out_path = '{0}/{1}'.format(self.path, filename)
+        self.handler.send_file(path, out_path)
+        return self.handler.container_path(self.directory, filename), out_path
+
+    def get_path(self):
+        filename = self.filename()
+        out_path = '{0}/{1}'.format(self.path, filename)
+        return self.handler.container_path(self.directory, filename), out_path
+
+
 def _get_handler(version, ip):
     if version.startswith('3.1'):
         return ManagerHandler31(ip)
     else:
         return ManagerHandler32(ip)
-
-
-def _random_tmp_path():
-    return '/tmp/_tmp_migration_report_file{0}'.format(uuid.uuid4())
 
 
 def _add_agents_alive_info(env_result):
@@ -283,17 +280,14 @@ def _add_agents_alive_info(env_result):
     _, path = tempfile.mkstemp()
     with open(path, 'w') as f:
         f.write(json.dumps(deployments))
-    with handler.manager_file(path) as input_file:
-        with handler.manager_file(_get_agents_resource('validate_agents.py')) as script:
-            result_file = _random_tmp_path()
-            handler.python_call('{0} {1} {2} {3}'.format(
-                script, input_file, result_file, env_result['version']))
-            with handler.local_file(result_file) as local_result:
-                handler.remove_file(result_file)
-                result_deployments = _read(local_result)
-#    handler.call('rm -f {0} {1} {2}'.format(
-#        input_file, result_file, script
-#    ))
+    with handler.files() as files:
+        input_file, _ = files.send(path)
+        script, _ = files.send(_get_agents_resource('validate_agents.py'))
+        cont_result, load_result = files.get_path()
+        handler.python_call('{0} {1} {2} {3}'.format(
+            script, input_file, cont_result, env_result['version']))
+        with handler.local_file(load_result) as local_result:
+            result_deployments = _read(local_result)
     for blueprint in env_result.get('blueprints', {}).itervalues():
         for name, deployment in blueprint['deployments'].iteritems():
             if name in result_deployments:
@@ -304,7 +298,8 @@ def _add_agents_alive_info(env_result):
                     'operations_worker_alive']
                 dep_alive = deployment['workflows_worker_alive'] and deployment[
                     'operations_worker_alive']
-                for agent_name, alive in res_deployment['agents_alive'].iteritems():
+                for agent_name, alive in res_deployment[
+                        'agents_alive'].iteritems():
                     deployment['agents'][agent_name]['alive'] = alive
                     dep_alive = dep_alive and alive
                 deployment['alive'] = dep_alive
@@ -316,23 +311,27 @@ def prepare_report(result, env, config):
     if env.get('inactive'):
         result['inactive'] = True
         return
-    status = call(['timeout', '2', 'wget', ip, '-o', '/tmp/index.html'])
+    _, temp = tempfile.mkstemp()
+    print temp
+    status = call(['timeout', '2', 'wget', ip, '-O', temp])
     if status:
         result['msg'] = 'Cant connect to manager'
         return
+    os.remove(temp)
     client = get_rest_client(manager_ip=ip)
     result['version'] = client.manager.get_version()['version']
     if config.test_manager_ssh:
         handler = _get_handler(result['version'], ip)
         try:
             handler.execute('echo test > /dev/null', timeout=4)
-            result_file = _random_tmp_path()
             content = str(uuid.uuid4())
-            with handler.manager_file(_get_agents_resource('validate_manager_env.py')) as tmp_file:
+            with handler.files() as files:
+                tmp_file, _ = files.send(
+                    _get_agents_resource('validate_manager_env.py'))
+                cont_res, load_res = files.get_path()
                 handler.python_call('{0} {1} {2}'.format(
-                    tmp_file, result_file, content))
-                with handler.local_file(result_file) as local_path:
-                    handler.remove_file(result_file)
+                    tmp_file, cont_res, content))
+                with handler.local_file(load_res) as local_path:
                     with open(local_path) as f:
                         res = f.read()
                         if res != content:
@@ -341,6 +340,7 @@ def prepare_report(result, env, config):
                                     content, res))
             result['manager_ssh'] = True
         except Exception as e:
+            traceback.print_exc()
             result['manager_ssh'] = False
             result['manager_ssh_error'] = str(e)
     if config.blueprints_states:
@@ -382,6 +382,7 @@ class Generate(Command):
         return 'generate'
 
     def prepare_args(self, parser):
+        parser.add_argument('--config', default='config.json')
         parser.add_argument('--manager')
         parser.add_argument('--env')
         parser.add_argument('--output')
@@ -395,11 +396,12 @@ class Generate(Command):
                             default=False, action='store_true')
 
     def perform(self, config):
+        set_globals(config)
         res = {}
         try:
-            tennants, _ = urllib.urlretrieve(_TENNANTS)
-            with open(tennants) as f:
-                managers = json.loads(f.read())
+            print _TENANTS
+            tenants, _ = urllib.urlretrieve(_TENANTS)
+            managers = _read(tenants)
             if config.manager:
                 managers = {
                     config.manager: managers[config.manager]
@@ -431,7 +433,10 @@ class Generate(Command):
                 result[mgr_name] = mgr_result
             for thread in threads:
                 thread.join()
-            for key in ['agents_count', 'deployments_count', 'blueprints_count']:
+            for key in [
+                    'agents_count',
+                    'deployments_count',
+                    'blueprints_count']:
                 val = 0
                 for manager in res['managers'].itervalues():
                     for env in manager.itervalues():
@@ -455,15 +460,17 @@ class ToCsv(Command):
     def perform(self, config):
         raport = _read(config.input)
         with open(config.output, 'w') as f, open(config.summary, 'w') as summary:
-            f.write('{0},{1},{2},{3},{4},{5},{6},{7},{8}\n'.format(
+            f.write('{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10}\n'.format(
                 'manager',
                 'env',
                 'ip',
                 'blueprint',
+                'multi_sec_group',
                 'deployment',
                 'version',
                 'nodes status',
                 'are agents on both manager and hosts responding?',
+                'last_execution_start_date',
                 'last_execution_start_time',
             ))
             summary.write('{0},{1},{2},{3},{4},{5}\n'.format(
@@ -484,6 +491,7 @@ class ToCsv(Command):
                     deployments_count = 0
                     valid_deployments_count = 0
                     for bpt_name, bpt in env.get('blueprints', {}).iteritems():
+                        multi_sec_group = bpt.get('multi_sec_nodes', '')
                         for dp_name, dp in bpt['deployments'].iteritems():
                             state = dp['status']
                             alive = dp.get('alive', 'skipped')
@@ -492,25 +500,37 @@ class ToCsv(Command):
                             deployments_count = deployments_count + 1
                             if valid:
                                 valid_deployments_count = valid_deployments_count + 1
-                            timestamps = [t for t, _ in dp.get('executions', [''])]
-                            timestamps.sort()
+                            timestamps = sorted(
+                                [t for t, _ in dp.get('executions', [''])])
                             if not timestamps:
                                 timestamps = ['']
                             last = timestamps[-1]
-                            f.write('{0},{1},{2},{3},{4},{5},{6},{7},{8}\n'.format(
-                                mgr_name,
-                                env_name,
-                                ip,
-                                bpt_name,
-                                dp_name,
-                                version,
-                                state,
-                                alive,
-                                last,
-                            ))
-                    summary.write('{0},{1},{2},{3},{4},{5}\n'.format(
-                        mgr_name, env_name, version, deployments_count, valid_deployments_count, checked
-                    ))
+                            times = last.split()
+                            times.append('')
+                            times.append('')
+                            date = times[0]
+                            time = times[1]
+                            f.write(
+                                '{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10}\n'.format(
+                                    mgr_name,
+                                    env_name,
+                                    ip,
+                                    bpt_name,
+                                    multi_sec_group,
+                                    dp_name,
+                                    version,
+                                    state,
+                                    alive,
+                                    date,
+                                    time))
+                    summary.write(
+                        '{0},{1},{2},{3},{4},{5}\n'.format(
+                            mgr_name,
+                            env_name,
+                            version,
+                            deployments_count,
+                            valid_deployments_count,
+                            checked))
 
 _COMMANDS = [
     Generate,
