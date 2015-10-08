@@ -18,8 +18,10 @@ from subprocess import call
 
 _DIRECTORY = os.path.dirname(os.path.realpath(__file__))
 
+
 def _std_err(msg):
     sys.stderr.write('{}\n'.format(msg))
+
 
 def _get_agents_resource(resource):
     return os.path.join(_DIRECTORY, 'agents', resource)
@@ -292,6 +294,19 @@ def _blueprints_with_multi_sec_group_nodes(client, blueprint_id):
             result.append(blueprint.id)
     return result 
 
+
+
+def _multi_sec_blueprints_to_csv(output, managers):
+    with open(output, 'w') as f:
+        for mngr_name, mngr in managers.iteritems():
+            for env_name, env in mngr.iteritems():
+                for blueprint in env.get('multi_sec_blueprints', []):
+                    f.write('{0},{1},{2}\n'.format(
+                        mngr_name,
+                        env_name,
+                        blueprint))
+
+
 class Managers(Command):
  
     @property
@@ -305,6 +320,7 @@ class Managers(Command):
         parser.add_argument('--output')
         parser.add_argument('--multi_sec_blueprints', default=False, action='store_true')
         parser.add_argument('--blueprint')
+        parser.add_argument('--csv_output')
 
     def perform(self, config):
         managers = _read_input(config)
@@ -335,10 +351,13 @@ class Managers(Command):
                     }
                     if config.multi_sec_blueprints:
                         manager_result[env_name][
-                            'multi_sec_blueprints'] =_blueprints_with_multi_sec_group_nodes(client, config.blueprint)
+                            'multi_sec_blueprints'] = _blueprints_with_multi_sec_group_nodes(client, config.blueprint)
                 result[name] = manager_result
+        if  config.multi_sec_blueprints and config.csv_output:
+            _multi_sec_blueprints_to_csv(config.csv_output, result) 
         _output(config, result)
-     
+
+  
 class MultiSecBlueprintsToCsv(Command):
 
     @property
