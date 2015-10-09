@@ -1,6 +1,5 @@
 Installation:
-This script need to be run in 3.1 cli environment:
-pip install cloudify==3.1
+See install.sh
 
 Configuration:
 config.json must be filled with data.
@@ -16,7 +15,7 @@ You can use --manager, --env, --blueprint parameters to reduce scope.
 I suggest to use those for at least first run in environment.
 
 WAIT BETWEEN SUBSEQUENT EXECUTIONS OF THIS SCRIPT!
-There is some issue with ssh connections - when we create too many too fast, they start to halt.
+There is an issue with ssh connections - when we create too many too fast, they start to halt.
 
 Script supports command to_csv. So if you prefer this format, you can easily change it.
 Note that some data from *.json file will not be available in *.csv file.

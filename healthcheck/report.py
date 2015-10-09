@@ -8,7 +8,7 @@ import tempfile
 import threading
 import traceback
 import time
-from cloudify_cli.utils import get_rest_client
+from cloudify_rest_client import CloudifyClient
 
 from distutils import spawn
 from subprocess import call
@@ -32,9 +32,13 @@ def set_globals(config):
     global _MANAGER_KEY
     _TENANTS = conf['tenants']
     _USER = conf['user']
-    _MANAGER_KEY = conf['manager_key']    
+    _MANAGER_KEY = conf['manager_key']
     if not _TENANTS or not _USER or not _MANAGER_KEY:
         raise RuntimeError('Wrong configuration')
+
+
+def get_rest_client(manager_ip):
+    return CloudifyClient(host=manager_ip)
 
 
 class Command(object):
@@ -184,7 +188,7 @@ class ManagerHandler(object):
     def load_file(self, source, target):
         self.scp(target, source, False)
 
-    def execute(self, cmd, timeout=None):
+    def execute(self, cmd, timeout=900):
         ssh_cmd = ['ssh', '-o', 'StrictHostKeyChecking=no', '-i',
                    os.path.expanduser(_MANAGER_KEY), '{0}@{1}'.format(
                        _USER, self.manager_ip), '-C', cmd]
