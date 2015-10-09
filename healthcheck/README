@@ -8,15 +8,17 @@ For our purposes user cloudify is fine.
 
 Usage:
 For full healthcheck use:
-python report.py generate --test-manager-ssh --test-agents-alive --blueprints-states --output report.json
+python report.py generate --test-manager-ssh --test-agents-alive --test-agents-vm-access --blueprints-states --output report.json
 Other combinations might give some unexpected results.
 
 You can use --manager, --env, --blueprint parameters to reduce scope.
 I suggest to use those for at least first run in environment.
 
-WAIT BETWEEN SUBSEQUENT EXECUTIONS OF THIS SCRIPT!
-There is an issue with ssh connections - when we create too many too fast, they start to halt.
+Script runs following checks (in this order) per deploymnet:
+1. Check if all nodes in deployment have consistent state and this states is 'started'.
+2. Check if all agents that are part of deployment are alive.
+3. Check if all vms that are part of deployment can be accessed via ssh/winrm from manager.
+If any check fails, all later checks are skipped.
 
 Script supports command to_csv. So if you prefer this format, you can easily change it.
 Note that some data from *.json file will not be available in *.csv file.
-

@@ -1,14 +1,24 @@
-import sys
-import threading
 import json
+import os
+import sys
+import tempfile
+import threading
 
+from subprocess import call
 from cloudify.celery import celery
+
+
+_DIRECTORY = os.path.dirname(os.path.realpath(__file__))
+
 
 _THREAD_COUNT = 10
 
 path = sys.argv[1]
 output = sys.argv[2]
 version = sys.argv[3]
+test_vm_access = len(sys.argv) > 4
+if test_vm_access:
+    test_vm_script = sys.argv[4]
 
 if version.startswith('3.1'):
     sep = '.'
@@ -41,9 +51,20 @@ def _insert_deployment_result(dep_res, deployment_id, deployment):
         agent_alive = _check_alive(agent)
         dep_res['agents_alive'][agent] = agent_alive
         dep_alive = dep_alive and agent_alive
-    if not dep_alive:
+    if not dep_alive or not test_vm_access:
         return
-
+    dep_python = '~/cloudify.{0}/env/bin/python'.format(deployment_id)
+    _, input_path = tempfile.mkstemp(dir=_DIRECTORY)
+    _, output_path = tempfile.mkstemp(dir=_DIRECTORY)
+    with open(input_path, 'w') as f:
+        f.write(json.dumps(deployment['agents']))
+    status = call(['timeout', '10', os.path.expanduser(dep_python),
+                   test_vm_script, input_path, output_path])
+    if status:
+        dep_res['agents_remote_access_error'] = True
+        return
+    with open(output_path) as f:
+        dep_res['agents_remote_access'] = json.loads(f.read())
 
 
 def _prepare_deployment_results(queue):

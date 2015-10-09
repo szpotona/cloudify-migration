@@ -5,9 +5,9 @@ import urllib
 import uuid
 import sys
 import tempfile
+import time
 import threading
 import traceback
-import time
 from cloudify_rest_client import CloudifyClient
 
 from distutils import spawn
@@ -56,7 +56,7 @@ def _get_agents_resource(resource):
     return os.path.join(_DIRECTORY, 'agents', resource)
 
 
-def _get_deployment_states(client, deployments):
+def _get_deployment_states(client, deployments, default_agent):
     res = {}
     agents_count = 0
     for deployment in deployments:
@@ -68,8 +68,7 @@ def _get_deployment_states(client, deployments):
                     deployment_id=deployment.id, node_name=node.id):
                 dep_states.add(node_instance.state)
                 if 'cloudify.nodes.Compute' in node.type_hierarchy:
-                    dep_agents[
-                        node_instance.id] = {
+                    current_agent = {
                         'state': node_instance.state,
                         'ip': node_instance.runtime_properties.get(
                             'ip',
@@ -80,6 +79,16 @@ def _get_deployment_states(client, deployments):
                             'cloudify_agent',
                             {}),
                         'is_windows': 'cloudify.openstack.nodes.WindowsServer' in node.type_hierarchy}
+                    dep_agents[node_instance.id] = current_agent
+                    agent_config = current_agent['cloudify_agent']
+                    agent_config['host'] = current_agent['ip']
+                    if not current_agent['is_windows']:  # For windows agent whole config must be in node properties.
+                        if 'key' not in agent_config:
+                            agent_config['key'] = default_agent['agent_key_path']
+                        if 'user' not in agent_config:
+                            agent_config['user'] = default_agent['user']
+                        if 'port' not in agent_config:
+                            agent_config['port'] = default_agent['remote_execution_port']
 
         if len(dep_states) > 1:
             status = 'mixed'
@@ -116,22 +125,23 @@ def _has_multi_sec_nodes(blueprint):
     return False
 
 
-def insert_blueprint_report(res, client, blueprint, deployments, config):
+def insert_blueprint_report(res, client, blueprint, deployments, config,
+                            default_agent):
     res['multi_sec_nodes'] = _has_multi_sec_nodes(blueprint)
     deployments = [
         dep for dep in deployments if dep.blueprint_id == blueprint.id]
     res['deployments_count'] = len(deployments)
     res['deployments'], res[
-        'agents_count'] = _get_deployment_states(client, deployments)
+        'agents_count'] = _get_deployment_states(client, deployments, default_agent)
 
 
-def _get_blueprints(client, blueprints, deployments, config):
+def _get_blueprints(client, blueprints, deployments, config, default_agent):
     threads = []
     res = {}
     for blueprint in blueprints:
         res[blueprint.id] = {}
         thread = threading.Thread(target=insert_blueprint_report, args=(
-            res[blueprint.id], client, blueprint, deployments, config))
+            res[blueprint.id], client, blueprint, deployments, config, default_agent))
         thread.start()
         threads.append(thread)
     for thread in threads:
@@ -164,6 +174,7 @@ class ManagerHandler(object):
         self.manager_ip = ip
 
     def scp(self, local_path, path_on_manager, to_manager):
+        time.sleep(4)
         scp_path = spawn.find_executable('scp')
         management_path = '{0}@{1}:{2}'.format(
             _USER,
@@ -189,6 +200,7 @@ class ManagerHandler(object):
         self.scp(target, source, False)
 
     def execute(self, cmd, timeout=900):
+        time.sleep(4)
         ssh_cmd = ['ssh', '-o', 'StrictHostKeyChecking=no', '-i',
                    os.path.expanduser(_MANAGER_KEY), '{0}@{1}'.format(
                        _USER, self.manager_ip), '-C', cmd]
@@ -197,6 +209,7 @@ class ManagerHandler(object):
             cmd_list.extend(ssh_cmd)
         else:
             cmd_list = ssh_cmd
+        print 'executing {0}'.format(cmd_list)
         result = call(cmd_list)
         if result:
             raise RuntimeError(
@@ -271,10 +284,9 @@ def _get_handler(version, ip):
         return ManagerHandler32(ip)
 
 
-def _add_agents_alive_info(env_result):
+def _add_agents_alive_info(env_result, config, handler, files):
     if not env_result.get('manager_ssh'):
         return
-    handler = _get_handler(env_result['version'], env_result['ip'])
     deployments = {}
     for blueprint in env_result.get('blueprints', {}).itervalues():
         for name, deployment in blueprint['deployments'].iteritems():
@@ -284,14 +296,20 @@ def _add_agents_alive_info(env_result):
     _, path = tempfile.mkstemp()
     with open(path, 'w') as f:
         f.write(json.dumps(deployments))
-    with handler.files() as files:
-        input_file, _ = files.send(path)
-        script, _ = files.send(_get_agents_resource('validate_agents.py'))
-        cont_result, load_result = files.get_path()
-        handler.python_call('{0} {1} {2} {3}'.format(
-            script, input_file, cont_result, env_result['version']))
-        with handler.local_file(load_result) as local_result:
-            result_deployments = _read(local_result)
+    input_file, _ = files.send(path)
+    script, _ = files.send(_get_agents_resource('validate_agents.py'))
+    remote_access_script, _ = files.send(_get_agents_resource(
+        'validate_remote_access.py'))
+    cont_result, load_result = files.get_path()
+    if config.test_agents_vm_access:
+        test_vm_access = remote_access_script
+    else:
+        test_vm_access = ''
+    handler.python_call('{0} {1} {2} {3} {4}'.format(
+        script, input_file, cont_result, env_result['version'],
+        test_vm_access))
+    with handler.local_file(load_result) as local_result:
+        result_deployments = _read(local_result)
     for blueprint in env_result.get('blueprints', {}).itervalues():
         for name, deployment in blueprint['deployments'].iteritems():
             if name in result_deployments:
@@ -307,6 +325,16 @@ def _add_agents_alive_info(env_result):
                     deployment['agents'][agent_name]['alive'] = alive
                     dep_alive = dep_alive and alive
                 deployment['alive'] = dep_alive
+                if 'agents_remote_access_error' in res_deployment:
+                    deployment['agents_remote_access_error'] = res_deployment[
+                        'agents_remote_access_error'] 
+                for agent_name, remote_access in res_deployment.get(
+                        'agents_remote_access', {}).iteritems():
+                    deployment['agents'][agent_name][
+                        'vm_accessible'] = remote_access['can_connect']
+                    if 'error' in remote_access:
+                        deployment['agents'][agent_name][
+                            'error_vm_accessible'] = remote_access['error']
 
 
 def prepare_report(result, env, config):
@@ -323,7 +351,19 @@ def prepare_report(result, env, config):
         return
     os.remove(temp)
     client = get_rest_client(manager_ip=ip)
+    default_agent = client.manager.get_context()['context'][
+        'cloudify']['cloudify_agent']
     result['version'] = client.manager.get_version()['version']
+    if config.blueprints_states:
+        deployments = client.deployments.list()
+        if config.blueprint:
+            blueprints = [client.blueprints.get(blueprint_id=config.blueprint)]
+        else:
+            blueprints = client.blueprints.list()
+        result['blueprints'], result['agents_count'] = _get_blueprints(
+            client, blueprints, deployments, config, default_agent)
+        result['deployments_count'] = len(deployments)
+        result['blueprints_count'] = len(blueprints)
     if config.test_manager_ssh:
         handler = _get_handler(result['version'], ip)
         try:
@@ -342,23 +382,13 @@ def prepare_report(result, env, config):
                             raise RuntimeError(
                                 'Invalid result retrieved, expected {0}, got {1}'.format(
                                     content, res))
-            result['manager_ssh'] = True
+                result['manager_ssh'] = True
+                if config.test_agents_alive:
+                    _add_agents_alive_info(result, config, handler, files)
         except Exception as e:
             traceback.print_exc()
             result['manager_ssh'] = False
             result['manager_ssh_error'] = str(e)
-    if config.blueprints_states:
-        deployments = client.deployments.list()
-        if config.blueprint:
-            blueprints = [client.blueprints.get(blueprint_id=config.blueprint)]
-        else:
-            blueprints = client.blueprints.list()
-        result['blueprints'], result['agents_count'] = _get_blueprints(
-            client, blueprints, deployments, config)
-        result['deployments_count'] = len(deployments)
-        result['blueprints_count'] = len(blueprints)
-    if config.test_agents_alive:
-        _add_agents_alive_info(result)
     return result
 
 
@@ -397,6 +427,8 @@ class Generate(Command):
         parser.add_argument('--test-manager-ssh',
                             default=False, action='store_true')
         parser.add_argument('--test-agents-alive',
+                            default=False, action='store_true')
+        parser.add_argument('--test-agents-vm-access',
                             default=False, action='store_true')
 
     def perform(self, config):
@@ -464,7 +496,7 @@ class ToCsv(Command):
     def perform(self, config):
         raport = _read(config.input)
         with open(config.output, 'w') as f, open(config.summary, 'w') as summary:
-            f.write('{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10}\n'.format(
+            f.write('{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12}\n'.format(
                 'manager',
                 'env',
                 'ip',
@@ -472,8 +504,10 @@ class ToCsv(Command):
                 'multi_sec_group',
                 'deployment',
                 'version',
+                'has windows vms?',
                 'nodes status',
                 'are agents on both manager and hosts responding?',
+                'are all vms in deployment accessible(ssh/winrm) from manager?',
                 'last_execution_start_date',
                 'last_execution_start_time',
             ))
@@ -502,6 +536,16 @@ class ToCsv(Command):
                             valid = state in ['started',
                                               'empty'] and alive is True
                             deployments_count = deployments_count + 1
+                            has_windows_computes = False
+                            for agent in dp.get('agents', []).itervalues():
+                                has_windows_computes = has_windows_computes or agent.get('is_windows', False)
+                            if valid:
+                                vm_access = True
+                                for agent in dp.get('agents', []).itervalues():
+                                    vm_access = vm_access and agent.get('vm_accessible', False)
+                            else:
+                                vm_access = 'skipped'
+                            valid = valid and vm_access
                             if valid:
                                 valid_deployments_count = valid_deployments_count + 1
                             timestamps = sorted(
@@ -515,7 +559,7 @@ class ToCsv(Command):
                             date = times[0]
                             time = times[1]
                             f.write(
-                                '{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10}\n'.format(
+                                '{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12}\n'.format(
                                     mgr_name,
                                     env_name,
                                     ip,
@@ -523,8 +567,10 @@ class ToCsv(Command):
                                     multi_sec_group,
                                     dp_name,
                                     version,
+                                    has_windows_computes,
                                     state,
                                     alive,
+                                    vm_access,
                                     date,
                                     time))
                     summary.write(
