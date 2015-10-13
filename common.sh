@@ -26,7 +26,7 @@ function perform_setup {
     NEW_CLI_DIR=$(absolute_path $4)
 
     resolve_managers_versions
-    supplement_managers_credentials
+#    supplement_managers_credentials
 }
 
 function error {

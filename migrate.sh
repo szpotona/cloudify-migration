@@ -68,6 +68,7 @@ function download_all_blueprints {
         local untar_options="xf $blueprint_tar_gz -C $extracted_dir --strip-components 1"
         mkdir $extracted_dir
         if ! (tar $untar_options) 2> /dev/null; then
+            echo "Using z"
             tar z$untar_options
         fi
         rm $blueprint_tar_gz
@@ -123,6 +124,7 @@ function create_deployments {
 read -p "Press enter to proceed with the <$OLD_MANAGER_VER --> $NEW_MANAGER_VER> migration."
 download_all_blueprints
 update_and_upload_all_blueprints
+exit 0
 create_deployments
 if $UPDATE_HOSTS_SOFTWARE; then
     $BASE_DIR/migrate_agents.sh -n $MAX_ATTEMPTS uninstall $OLD_MANAGER_VER $OLD_CLI_PYTHON_VIRTENV $OLD_CLI_DIR $AUTHENTICATION_DATA_OVERRIDE_PATH

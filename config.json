@@ -1,0 +1,5 @@
+{
+  "tenants": "",
+  "user": "ubuntu",
+  "manager_key": "/home/kp/vms/main_13/kp_cloudify-manager-kp.pem"
+}

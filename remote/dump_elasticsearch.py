@@ -5,9 +5,8 @@ from subprocess import check_output
 CHUNK_SIZE = 100
 
 dep_id = sys.argv[1]
-
-magic_path = '/tmp/cloudify_migration_data_storage_3f53t9'
-magic_path2 = '/tmp/cloudify_migration_data_events_3f53t9'
+data_path = sys.argv[2]
+events_path = sys.argv[3]
 
 dump_storage_template = (
     'http://localhost:9200/'
@@ -62,10 +61,10 @@ def dump_chunks(f, template):
             js = json.loads(get_chunk(cmd))
             append_to_file(f, js)
 
-with open(magic_path, 'a') as f:
+with open(data_path, 'a') as f:
     # Storage dumping
     dump_chunks(f, dump_storage_template)
 
-with open(magic_path2, 'a') as f:
+with open(events_path, 'a') as f:
     # Events dumping
     dump_chunks(f, dump_events_template)

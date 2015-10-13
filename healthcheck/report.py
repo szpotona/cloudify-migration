@@ -24,16 +24,22 @@ def _read(filename):
     with open(filename) as f:
         return json.loads(f.read())
 
-
-def set_globals(config):
+def set_credentials(config):
     conf = _read(config.config)
-    global _TENANTS
     global _USER
     global _MANAGER_KEY
-    _TENANTS = conf['tenants']
     _USER = conf['user']
     _MANAGER_KEY = conf['manager_key']
-    if not _TENANTS or not _USER or not _MANAGER_KEY:
+    if not _USER or not _MANAGER_KEY:
+        raise RuntimeError('Wrong configuration')
+
+
+def set_globals(config):
+    set_credentials(config)
+    conf = _read(config.config)
+    global _TENANTS
+    _TENANTS = conf['tenants']
+    if not _TENANTS:
         raise RuntimeError('Wrong configuration')
 
 
@@ -174,7 +180,7 @@ class ManagerHandler(object):
         self.manager_ip = ip
 
     def scp(self, local_path, path_on_manager, to_manager):
-        time.sleep(4)
+#        time.sleep(4)
         scp_path = spawn.find_executable('scp')
         management_path = '{0}@{1}:{2}'.format(
             _USER,
@@ -200,7 +206,7 @@ class ManagerHandler(object):
         self.scp(target, source, False)
 
     def execute(self, cmd, timeout=900):
-        time.sleep(4)
+        #time.sleep(4)
         ssh_cmd = ['ssh', '-o', 'StrictHostKeyChecking=no', '-i',
                    os.path.expanduser(_MANAGER_KEY), '{0}@{1}'.format(
                        _USER, self.manager_ip), '-C', cmd]
@@ -277,7 +283,7 @@ class FileManager(object):
         return self.handler.container_path(self.directory, filename), out_path
 
 
-def _get_handler(version, ip):
+def get_handler(version, ip):
     if version.startswith('3.1'):
         return ManagerHandler31(ip)
     else:
@@ -365,7 +371,7 @@ def prepare_report(result, env, config):
         result['deployments_count'] = len(deployments)
         result['blueprints_count'] = len(blueprints)
     if config.test_manager_ssh:
-        handler = _get_handler(result['version'], ip)
+        handler = get_handler(result['version'], ip)
         try:
             handler.execute('echo test > /dev/null', timeout=4)
             content = str(uuid.uuid4())
@@ -380,8 +386,8 @@ def prepare_report(result, env, config):
                         res = f.read()
                         if res != content:
                             raise RuntimeError(
-                                'Invalid result retrieved, expected {0}, got {1}'.format(
-                                    content, res))
+                                'Invalid result retrieved, expected {0}, got '
+                                '{1}'.format(content, res))
                 result['manager_ssh'] = True
                 if config.test_agents_alive:
                     _add_agents_alive_info(result, config, handler, files)
