@@ -11,18 +11,19 @@ import traceback
 from cloudify_rest_client import CloudifyClient
 
 from distutils import spawn
-from subprocess import call
-
+import subprocess
 
 _DIRECTORY = os.path.dirname(os.path.realpath(__file__))
 _TENANTS = ''
 _USER = ''
 _MANAGER_KEY = ''
+_VERBOSE = True
 
 
 def _read(filename):
     with open(filename) as f:
         return json.loads(f.read())
+
 
 def set_credentials(config):
     conf = _read(config.config)
@@ -41,6 +42,19 @@ def set_globals(config):
     _TENANTS = conf['tenants']
     if not _TENANTS:
         raise RuntimeError('Wrong configuration')
+
+
+def call(command_arr):
+#    print 'Executing {0}'.format(command_arr)
+    if _VERBOSE:
+        pipes = None
+    else:
+        pipes = subprocess.PIPE
+    p = subprocess.Popen(command_arr, stdout=pipes,
+                         stderr=pipes)
+    out, err = p.communicate()
+    if p.returncode:
+        raise RuntimeError('Command {0} failed.'.format(command_arr))
 
 
 def get_rest_client(manager_ip):
@@ -180,7 +194,7 @@ class ManagerHandler(object):
         self.manager_ip = ip
 
     def scp(self, local_path, path_on_manager, to_manager):
-#        time.sleep(4)
+        time.sleep(4)
         scp_path = spawn.find_executable('scp')
         management_path = '{0}@{1}:{2}'.format(
             _USER,
@@ -206,8 +220,8 @@ class ManagerHandler(object):
         self.scp(target, source, False)
 
     def execute(self, cmd, timeout=900):
-        #time.sleep(4)
-        ssh_cmd = ['ssh', '-o', 'StrictHostKeyChecking=no', '-i',
+        time.sleep(4)
+        ssh_cmd = ['ssh',  '-o', 'ServerAliveInterval=30', '-o', 'StrictHostKeyChecking=no', '-i',
                    os.path.expanduser(_MANAGER_KEY), '{0}@{1}'.format(
                        _USER, self.manager_ip), '-C', cmd]
         if timeout:
@@ -215,11 +229,10 @@ class ManagerHandler(object):
             cmd_list.extend(ssh_cmd)
         else:
             cmd_list = ssh_cmd
-        print 'executing {0}'.format(cmd_list)
         result = call(cmd_list)
         if result:
             raise RuntimeError(
-                'Could not execute remote command "{0}"'.format(cmd))
+                'Could not execute remote command "{0}"'.format(cmd_list))
 
     def files(self):
         return FileManager(self)

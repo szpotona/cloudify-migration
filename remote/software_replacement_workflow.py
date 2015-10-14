@@ -16,7 +16,9 @@ def replace_host_software(ctx, op_name, **kwargs):
     graph = ctx.graph_mode()
     for node in ctx.nodes:
         for instance in node.instances:
-            if _is_host_node(instance):
+            if _is_host_node(instance) \
+                    and instance._node_instance.state == 'started' \
+                    and node.properties['install_agent'] is True:
                 if op_name == "uninstall":
                     generate_tasks_fun = _host_pre_stop
                 elif op_name == "install":

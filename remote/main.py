@@ -6,12 +6,17 @@ from subprocess import check_output
 import subprocess
 import tarfile
 import tempfile
+import time
 import shutil
 import shlex
 from cloudify_rest_client.client import CloudifyClient
+from cloudify_rest_client.executions import Execution
+
 
 _DIRECTORY = os.path.dirname(os.path.realpath(__file__))
-_VERBOSE = False
+_VERBOSE = True
+
+
 def _tempfile():
     _, res = tempfile.mkstemp(dir=os.path.join(_DIRECTORY, 'tmp'))
     return res
@@ -87,8 +92,6 @@ def health_check_and_dump(config):
     res.add(events_path, arcname='events.json')
 
 def call(command):
-    if _VERBOSE:
-        print 'Executing {0}'.format(command)
     shlex_split = shlex.split(command)
     if _VERBOSE:
         pipes = None
@@ -133,6 +136,29 @@ def recreate_deployment(config):
         file=os.path.join(dep_dir, 'events.json'),
         index='cloudify_events'
     ))
+    execution = client.executions.get(create_dep_execution.id)
+    while execution.status not in Execution.END_STATES:
+        time.sleep(2)
+        print 'Waiting for execution {0}'.format(create_dep_execution.id)
+        execution = client.executions.get(create_dep_execution.id)
+
+_ENVS = {
+  '3.1.0': '/opt/manager',
+  '3.2.0': '/opt/manager/env',
+  '3.2.1': '/opt/manager/env'
+}
+
+
+def _perform_agent_operation(config):
+    env = _ENVS[config.version]
+    auth_path = _tempfile()
+    call('{0}/bin/python {1}/modify_agents.py {0} {4} 5 {2} {3}'.format(
+        env, _DIRECTORY, config.deployment, auth_path, config.operation
+    )) 
+
+
+def modify_agents(config):
+    _perform_agent_operation(config)
 
 
 def _parser():
@@ -147,6 +173,13 @@ def _parser():
     create.add_argument('--deployment', required=True)
     create.add_argument('--input', required=True)
     create.set_defaults(func=recreate_deployment)
+
+    modify = subparsers.add_parser('modify_agents')
+    modify.add_argument('--deployment', required=True)
+    modify.add_argument('--version', required=True)
+    modify.add_argument('--operation', required=True)
+    modify.set_defaults(func=modify_agents)
+
     return parser
 
 

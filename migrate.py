@@ -10,7 +10,7 @@ import uuid
 import json
 import yaml
 _DIRECTORY = os.path.dirname(os.path.realpath(__file__))
-_VERBOSE = True
+_VERBOSE = False
 _ENVS = os.path.join(_DIRECTORY, 'envs')
 
 def call(command):
@@ -150,13 +150,14 @@ def migrate_blueprints(source_runner, target_runner):
     finally:
         shutil.rmtree(blueprints_path) 
 
-_RUNTIME_DATA_DUMP = 'elasticsearch'
 
 def install_code(handler, directory, config):
     path = tempfile.mkdtemp()
     try:
         arch_path = os.path.join(path, 'arch.tar.gz')
+        call('cp -rf {0}/healthcheck {0}/remote'.format(_DIRECTORY))
         call('bash -c "cd {1}/remote ; tar -cf {0} *;"'.format(arch_path, _DIRECTORY))
+        call('rm -rf {0}/remote/healthcheck'.format(_DIRECTORY))
         handler.execute('mkdir -p {0}'.format(directory))
         handler.send_file(arch_path, directory)
         handler.execute('tar xf {0} -C {1} && cd {1} && mkdir -p tmp'.format(
@@ -174,20 +175,23 @@ def _migrate_deployment(deployment, existing_deployments,
     deployment_path = tempfile.mkdtemp(
         prefix='deployment_dir_{0}'.format(deployment.id))
     try:
+        print 'Deployment {0}'.format(deployment.id)
         filename = str(uuid.uuid4())
         script_path = source_runner.handler.container_path(_REMOTE_TMP, filename)
+        print 'Healthcheck and data dump...'        
         source_runner.handler.python_call('{0} healthcheck_and_dump --deployment {1} --output {2}'.format(
             source_runner.handler.container_path(_REMOTE_PATH, 'main.py'),
             deployment.id,
             script_path
         ))
         res_path = os.path.join(deployment_path, 'arch.tar.gz')
+        print 'Downloading data dump...'        
         source_runner.handler.load_file('~/{0}/{1}'.format(_REMOTE_TMP, filename),
                                         res_path)
-      
         _, inputs = tempfile.mkstemp(dir=deployment_path)
         with open(inputs, 'w') as f:
             f.write(yaml.dump(deployment['inputs']))
+        print 'Creating deployment...'        
         target_runner.cfy_run('deployments create -d {0} -b {1} -i {2}'.format(
             deployment.id,
             deployment.blueprint_id,
@@ -195,17 +199,26 @@ def _migrate_deployment(deployment, existing_deployments,
         ))
         archname = str(uuid.uuid4())
         script_arch = target_runner.handler.container_path(_REMOTE_TMP, archname)
+        print 'Sending data dump...'        
         target_runner.handler.send_file(res_path, os.path.join(_REMOTE_TMP, archname))
+        print 'Recreating deployment...'        
         target_runner.handler.python_call('{0} recreate_deployment --deployment {1} --input {2}'.format(
             target_runner.handler.container_path(_REMOTE_PATH, 'main.py'),
             deployment.id,
             script_arch
         )) 
+        print 'Uninstalling old agents...'        
+        _modify_agents(source_runner, 'uninstall', deployment.id)
+        print 'Installing new agents...'        
+        _modify_agents(target_runner, 'install', deployment.id)
+        print 'Deployment {0} migrated.'.format(deployment.id)        
     finally:
         print deployment_path
 
 def migrate_deployments(source_runner, target_runner, config):
+    print 'Installing code on source manager'
     install_code(source_runner.handler, _REMOTE_PATH, config)
+    print 'Installing code on target manager'
     install_code(target_runner.handler, _REMOTE_PATH, config)
     deployments = source_runner.rest.deployments.list()
     existing_deployments = [d.id for d in 
@@ -223,6 +236,28 @@ def migrate(config):
     migrate_deployments(source_runner, target_runner, config)
     pass
 
+
+def _modify_agents(runner, operation, deployment):
+    print 'Performing agent modification {0} for deployment {1}'.format(operation, deployment)
+    runner.handler.python_call('{0} modify_agents --operation {1} --deployment {2} --version {3}'.format(
+        runner.handler.container_path(_REMOTE_PATH, 'main.py'),
+        operation,
+        deployment,
+        runner.version
+    ))
+
+
+def modify_agents(config):
+    runner = _init_runner(config.manager_ip)
+    report.set_credentials(config)
+    install_code(runner.handler, _REMOTE_PATH, config)
+    _modify_agents(runner, config.operation, config.deployment)
+
+def perform_cleanup(config):
+    report.set_credentials(config)
+    runner = _init_runner(config.manager_ip)
+    runner.handler.execute('sudo rm -rf ~/{0}'.format(_REMOTE_PATH))
+
 def _parser():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers()
@@ -237,6 +272,18 @@ def _parser():
                             default=False, action='store_true')
  
     migrate_p.set_defaults(func=migrate)
+
+    agent = subparsers.add_parser('agents')
+    agent.add_argument('--deployment', required=True)
+    agent.add_argument('--manager_ip', required=True)
+    agent.add_argument('--operation', required=True)
+    agent.add_argument('--config', required=True)
+    agent.set_defaults(func=modify_agents)
+
+    cleanup = subparsers.add_parser('cleanup')
+    cleanup.add_argument('--manager_ip', required=True)
+    cleanup.add_argument('--config', required=True)
+    cleanup.set_defaults(func=perform_cleanup)
     return parser
 
 def main(args):

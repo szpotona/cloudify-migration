@@ -20,6 +20,7 @@ def _events_generator(execution_id, sm):
     events_batch_size = 100
     finished = False
     while not finished:
+        print 'Waiting for execution {0}'.format(execution_id)
         events_total = events_received + 1
         while events_received < events_total:
             response = es_connection.search(

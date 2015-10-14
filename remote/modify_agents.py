@@ -9,6 +9,7 @@ from manager_rest.storage_manager import instance as storage_manager_instance
 
 import agents_utils
 
+_DIRECTORY = os.path.dirname(os.path.realpath(__file__))
 
 def _prepare_auth_updates(auth_dict, sm):
     result = {}
@@ -61,53 +62,40 @@ def main(args):
     manager_venv = args[1]
     operation = args[2]
     max_attempts = args[3]
+    deployment_id = args[4]
+    auth_override = args[5]
 
-    with open('auth_config.yaml', 'r') as auth_stream:
+    with open(auth_override, 'r') as auth_stream:
         custom_auth = yaml.load(auth_stream) or {}
 
     actions = _prepare_auth_updates(custom_auth, sm)
 
-    if os.path.isfile('deployment_id'):
-        with open('deployment_id', 'r') as deployment_file:
-            deployment_id = deployment_file.read()
-            deployments = [sm.get_deployment(deployment_id)]
-    else:
-        deployments = sm.deployments_list()
-    errors = []
-    for deployment in deployments:
-        node_instances = sm.get_node_instances(deployment.id)
-        if agents_utils.is_deployment_installed(node_instances):
-            try:
-                _perform_deployment_updates(
-                    deployment.id,
-                    actions,
-                    'update',
-                    sm
-                )
-                cmd = '/bin/bash modify_agents.sh {} {} {} {} {}'.format(
-                    deployment.blueprint_id,
-                    deployment.id,
-                    manager_venv,
-                    operation,
-                    max_attempts
-                )
-                ret = os.system(cmd)
-            finally:
-                _perform_deployment_updates(
-                    deployment.id,
-                    actions,
-                    'revert',
-                    sm
-                )
-            if ret:
-                errors.append(deployment.id)
-        else:
-            print 'Deployment {0} is not installed, skipping'.format(
-                deployment.id
-            )
-    for dep in errors:
-        print 'Deployment {0}: operation {1} failed.'.format(dep, operation)
-
+    deployment = sm.get_deployment(deployment_id)
+    node_instances = sm.get_node_instances(deployment.id)
+    try:
+        _perform_deployment_updates(
+            deployment.id,
+            actions,
+            'update',
+            sm
+        )
+        cmd = '/bin/bash -c "cd {0} && ./modify_agents.sh {1} {2} {3} {4} {5}"'.format(
+            _DIRECTORY,
+            deployment.blueprint_id,
+            deployment.id,
+            manager_venv,
+            operation,
+            max_attempts
+        )
+        ret = os.system(cmd)
+    finally:
+        _perform_deployment_updates(
+            deployment.id,
+            actions,
+            'revert',
+            sm
+        )
+    sys.exit(ret)
 
 if __name__ == '__main__':
     main(sys.argv)
