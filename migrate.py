@@ -5,13 +5,33 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import uuid
 import json
 import yaml
+import time
+import datetime
+import traceback
+
+from cloudify_rest_client.executions import Execution
+
 _DIRECTORY = os.path.dirname(os.path.realpath(__file__))
+
 _VERBOSE = False
 _ENVS = os.path.join(_DIRECTORY, 'envs')
+_HEALTHCHECK_FAILED = 'healtcheck_failed'
+
+
+def _json_load(path):
+    with open(path) as f:
+        return json.loads(f.read())
+
+def _json_load_remote(runner, load_path, tmp_path):
+    _, result_local = tempfile.mkstemp(dir=tmp_path)
+    runner.handler.load_file(load_path, result_local)
+    return _json_load(result_local) 
+ 
 
 def call(command):
     if _VERBOSE:
@@ -168,26 +188,112 @@ def install_code(handler, directory, config):
 _REMOTE_PATH = 'migration'
 _REMOTE_TMP = os.path.join(_REMOTE_PATH, 'tmp')
 
+
+def _wait_for_execution(execution_id, client):
+    execution = client.executions.get(execution_id)
+    while execution.status not in Execution.END_STATES:
+        time.sleep(2)
+        print 'Waiting for execution {0}'.format(execution_id)
+        execution = client.executions.get(execution_id)
+
+
+def _perform_migration(deployment, existing_deployments,
+                       source_runner, target_runner, logpath):
+    done = False
+    retry = False
+    result = {}
+    while not done:
+        internal_error = False
+        try:
+            _migrate_deployment(deployment, existing_deployments, source_runner, target_runner, result)
+        except Exception as e:
+            traceback.print_exc()
+            internal_error = True
+            result['error'] = str(e)
+        phase = result['phase']
+        error = result['error']
+        if internal_error:
+            print 'Phase {0}: internal error: "{1}"'.format(phase, error)
+        else:
+            if phase == 'deployment_migrated':
+                migration_state = 'migrated'
+                done = True
+            elif phase == 'starting':
+                if not retry:
+                    migration_state = 'skipped_automatically'
+                    done = True
+        if not done and not internal_error:
+            print 'Phase {0}: healthcheck error: "{1}"'.format(phase, error)
+        if not done:
+            print 'Failure during migration of deployment {0} detected'.format(deployment.id)
+            answer = ''
+            while answer not in ['skip', 'retry', 'abort']:
+                print 'Choose action [skip,retry,abort]'
+                answer = raw_input('--> ')
+            if answer == 'skip':
+                migration_state = 'skipped_manually'
+                done = True
+            elif answer == 'retry':
+                retry = True
+            else:
+                raise RuntimeError('Migration aborted')
+    
+    if migration_state == 'migrated':
+        status = 'migrated'
+    else:
+        status = '{0}, phase {1}, error: {2}'.format(
+            migration_state, phase, error
+        )
+    msg = '{0}: <{1}> {2}\n'.format(
+        datetime.datetime.now(),
+        deployment.id,
+        status
+    ) 
+    with open(logpath, 'a') as f:
+        f.write(msg)
+
+
 def _migrate_deployment(deployment, existing_deployments,
-                        source_runner, target_runner):
-    if deployment.id in existing_deployments:
-        return
+                        source_runner, target_runner, result):
+    phase = 'starting'
+    error = ''
     deployment_path = tempfile.mkdtemp(
         prefix='deployment_dir_{0}'.format(deployment.id))
     try:
-        print 'Deployment {0}'.format(deployment.id)
+        print 'Deployment {0}:'.format(deployment.id)
+        if deployment.id in existing_deployments:
+            print 'Deployment already exists, skipping'
+            error = 'Deployment exists'
+            return
         filename = str(uuid.uuid4())
-        script_path = source_runner.handler.container_path(_REMOTE_TMP, filename)
+        source_output_parameter_path = source_runner.handler.container_path(_REMOTE_TMP, filename)
+        source_output_load_path = '~/{0}/{1}'.format(_REMOTE_TMP, filename)
+        filename = str(uuid.uuid4())
+        target_output_parameter_path = target_runner.handler.container_path(_REMOTE_TMP, filename)
+        target_output_load_path = '~/{0}/{1}'.format(_REMOTE_TMP, filename)
+ 
         print 'Healthcheck and data dump...'        
-        source_runner.handler.python_call('{0} healthcheck_and_dump --deployment {1} --output {2}'.format(
+        source_runner.handler.python_call('{0} healthcheck_and_dump --deployment {1} --output {2} --version {3}'.format(
             source_runner.handler.container_path(_REMOTE_PATH, 'main.py'),
             deployment.id,
-            script_path
+            source_output_parameter_path,
+            source_runner.version
         ))
         res_path = os.path.join(deployment_path, 'arch.tar.gz')
         print 'Downloading data dump...'        
-        source_runner.handler.load_file('~/{0}/{1}'.format(_REMOTE_TMP, filename),
-                                        res_path)
+        source_runner.handler.load_file(source_output_load_path, res_path)
+        with tarfile.TarFile(res_path) as tar:
+            state_file = tar.extractfile('state.json')
+            state = json.loads(state_file.read())
+        
+        if _HEALTHCHECK_FAILED in state:
+            error = 'Initial healtcheck for deployment {0} failed, reason: {1}'.format(
+                deployment.id, state[_HEALTHCHECK_FAILED]
+            )
+            return
+        else:
+            print 'Initial healtcheck for deployment {0} succeeded'.format(deployment.id)
+
         _, inputs = tempfile.mkstemp(dir=deployment_path)
         with open(inputs, 'w') as f:
             f.write(yaml.dump(deployment['inputs']))
@@ -197,35 +303,93 @@ def _migrate_deployment(deployment, existing_deployments,
             deployment.blueprint_id,
             inputs
         ))
+        phase = 'creating_deployment'
+        create_dep_execution = target_runner.rest.executions.list(
+            deployment_id=deployment.id
+        )[0]
+        print 'Waiting for create_deployment_environment workflow'
+        _wait_for_execution(create_dep_execution.id, target_runner.rest)
         archname = str(uuid.uuid4())
         script_arch = target_runner.handler.container_path(_REMOTE_TMP, archname)
         print 'Sending data dump...'        
         target_runner.handler.send_file(res_path, os.path.join(_REMOTE_TMP, archname))
-        print 'Recreating deployment...'        
-        target_runner.handler.python_call('{0} recreate_deployment --deployment {1} --input {2}'.format(
+        recreate_result = str(uuid.uuid4())
+        script_recreate_result = target_runner.handler.container_path(_REMOTE_TMP, recreate_result)
+        print 'Restoring deployment runtime data...'        
+        target_runner.handler.python_call(('{0} recreate_deployment --deployment {1} --input {2}'
+                                           ' --version {3} --output {4}').format(
             target_runner.handler.container_path(_REMOTE_PATH, 'main.py'),
             deployment.id,
-            script_arch
+            script_arch,
+            target_runner.version,
+            target_output_parameter_path
         )) 
+        print 'Loading result of recreate deployment...'        
+        recreate_result = _json_load_remote(target_runner, target_output_load_path, deployment_path)
+        if _HEALTHCHECK_FAILED in recreate_result:
+            error = 'Post recreate deployment healtcheck for deployment {0} failed, reason: {1}'.format(
+                deployment.id, recreate_result[_HEALTHCHECK_FAILED]
+            )
+            return
+        else:
+            print 'Post recreate deployment healtcheck for deployment {0} succeeded'.format(deployment.id)
         print 'Uninstalling old agents...'        
-        _modify_agents(source_runner, 'uninstall', deployment.id)
-        print 'Installing new agents...'        
-        _modify_agents(target_runner, 'install', deployment.id)
+        phase = 'uninstalling_agents'
+        source_runner.handler.python_call(('{0} uninstall_agents --deployment {1}'
+                                           ' --version {2} --output {3}').format(
+            source_runner.handler.container_path(_REMOTE_PATH, 'main.py'),
+            deployment.id,
+            source_runner.version,
+            source_output_parameter_path
+        ))
+        uninstall_result = _json_load_remote(source_runner, source_output_load_path, deployment_path)
+        if _HEALTHCHECK_FAILED in uninstall_result:
+            error = 'Post agent uninstall healtcheck for deployment {0} failed, reason: {1}'.format(
+                deployment.id, uninstall_result[_HEALTHCHECK_FAILED]
+            )
+            return
+        else:
+            print 'Post agent uninstall healtcheck for deployment {0} succeeded'.format(deployment.id)
+        print 'Installing new agents...' 
+        phase = 'installing_agents'
+        target_runner.handler.python_call(('{0} install_agents --deployment {1}'
+                                           ' --version {2} --output {3}').format(
+            target_runner.handler.container_path(_REMOTE_PATH, 'main.py'),
+            deployment.id,
+            target_runner.version,
+            target_output_parameter_path
+        ))
+        install_result = _json_load_remote(target_runner, target_output_load_path, deployment_path)
+        if _HEALTHCHECK_FAILED in install_result:
+            error = 'Post agent install healtcheck for deployment {0} failed, reason: {1}'.format(
+                deployment.id, install_result[_HEALTHCHECK_FAILED]
+            )
+            return
+        else:
+            print 'Post agent install healtcheck for deployment {0} succeeded'.format(deployment.id)
         print 'Deployment {0} migrated.'.format(deployment.id)        
+        phase = 'deployment_migrated'
     finally:
-        print deployment_path
+        result['phase'] = phase
+        result['error'] = error
+        shutil.rmtree(deployment_path)
+
 
 def migrate_deployments(source_runner, target_runner, config):
     print 'Installing code on source manager'
     install_code(source_runner.handler, _REMOTE_PATH, config)
     print 'Installing code on target manager'
     install_code(target_runner.handler, _REMOTE_PATH, config)
-    deployments = source_runner.rest.deployments.list()
     existing_deployments = [d.id for d in 
         target_runner.rest.deployments.list()]
+    if config.deployment:
+        deployments = [
+            source_runner.rest.deployments.get(config.deployment)]
+    else:
+        deployments = source_runner.rest.deployments.list()
     for deployment in deployments:
-        _migrate_deployment(deployment, existing_deployments,
-                            source_runner, target_runner)
+        _perform_migration(deployment, existing_deployments,
+                           source_runner, target_runner, config.logfile)
  
 def migrate(config):
     source_runner = _init_runner(config.source)
@@ -253,10 +417,36 @@ def modify_agents(config):
     install_code(runner.handler, _REMOTE_PATH, config)
     _modify_agents(runner, config.operation, config.deployment)
 
+
 def perform_cleanup(config):
     report.set_credentials(config)
     runner = _init_runner(config.manager_ip)
     runner.handler.execute('sudo rm -rf ~/{0}'.format(_REMOTE_PATH))
+
+
+def perform_healthcheck(config):
+    report.set_credentials(config)
+    runner = _init_runner(config.manager_ip)
+    print 'Installing required code'
+    install_code(runner.handler, _REMOTE_PATH, config)
+    filename = str(uuid.uuid4())
+    print 'Running healtcheck'
+    report_path = runner.handler.container_path(_REMOTE_TMP, filename)
+    runner.handler.python_call('{0} healthcheck --deployment {1} --version {2} --output {3}'.format(
+        runner.handler.container_path(_REMOTE_PATH, 'main.py'),
+        config.deployment,
+        runner.version,
+        report_path
+    ))
+    _, res_path = tempfile.mkstemp()
+    print 'Loading results'
+    runner.handler.load_file('~/{0}/{1}'.format(_REMOTE_TMP, filename),
+                              res_path)
+    print 'Results:'
+    with open(res_path) as f:
+        print f.read()
+    os.remove(res_path)
+ 
 
 def _parser():
     parser = argparse.ArgumentParser()
@@ -268,6 +458,8 @@ def _parser():
     migrate_p.add_argument('--source', required=True)
     migrate_p.add_argument('--target', required=True)
     migrate_p.add_argument('--config', required=True)
+    migrate_p.add_argument('--logfile', required=True)
+    migrate_p.add_argument('--deployment')
     migrate_p.add_argument('--skip-blueprints',
                             default=False, action='store_true')
  
@@ -284,6 +476,12 @@ def _parser():
     cleanup.add_argument('--manager_ip', required=True)
     cleanup.add_argument('--config', required=True)
     cleanup.set_defaults(func=perform_cleanup)
+
+    healthcheck_p = subparsers.add_parser('healthcheck')
+    healthcheck_p.add_argument('--deployment', required=True)
+    healthcheck_p.add_argument('--manager_ip', required=True)
+    healthcheck_p.add_argument('--config', required=True)
+    healthcheck_p.set_defaults(func=perform_healthcheck) 
     return parser
 
 def main(args):

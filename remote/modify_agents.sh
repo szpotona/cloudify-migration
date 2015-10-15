@@ -1,8 +1,8 @@
 #!/bin/bash
 
 set -e
-if [[ $# -lt 5 ]]; then
-    echo "Usage: $0 blueprint_id deployment_id manager_env operation max_attempts"
+if [[ $# -lt 6 ]]; then
+    echo "Usage: $0 blueprint_id deployment_id manager_env operation max_attempts version"
     exit 1
 fi
 
@@ -13,16 +13,15 @@ cp ${CELERY_WORK_DIR}/celeryd-includes ${CELERY_WORK_DIR}/celeryd-includes.backu
 echo "INCLUDES=$INCLUDES,software_replacement_workflow" > ${CELERY_WORK_DIR}/celeryd-includes
 
 service celeryd-${WORKER_MODIFIER} restart </dev/null >/dev/null 2>/dev/null &
-echo "Celery worker restarted, executing operation"
-# This is a bit extreme but works. We might alternatively wait in execute.py for agent to come alive.
-for S in `seq 5`; do
-    sleep 4
-    echo "Waiting for workflows worker"
+
+echo "Waiting for workflows worker"
+for s in `seq 3`; do
+  sleep 4
+  echo "Waiting for workflows worker"
 done
 
-echo "Starting operation"
 set +e
-script -q -c "$3/bin/python execute.py $1 $2 $4 $5" /dev/null
+stdbuf -i0 -o0 -e0 $3/bin/python execute.py $1 $2 $4 $5 $6
 CODE=$?
 set -e
 

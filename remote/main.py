@@ -11,24 +11,76 @@ import shutil
 import shlex
 from cloudify_rest_client.client import CloudifyClient
 from cloudify_rest_client.executions import Execution
-
+from healthcheck import report
+from healthcheck.agents import validate_agents
 
 _DIRECTORY = os.path.dirname(os.path.realpath(__file__))
 _VERBOSE = True
-
+_HEALTHCHECK_FAILED = 'healtcheck_failed'
 
 def _tempfile():
     _, res = tempfile.mkstemp(dir=os.path.join(_DIRECTORY, 'tmp'))
     return res
 
+
 def _tempdir():
     return tempfile.mkdtemp(dir=os.path.join(_DIRECTORY, 'tmp'))
 
+
+def _json_dump(path, content):
+    with open(path, 'w') as f:
+        f.write(json.dumps(content, indent=2))
+
+
+def _mk_public(path):
+    os.chmod(path, 0o666)
+
+ 
+def healthcheck(deployment_id, version, assert_vms_agents_alive=True, check_vms_access=True):
+    client = CloudifyClient()
+    deployment = client.deployments.get(deployment_id)
+    state, _ = report.get_deployment_states(
+        client , [deployment], report.get_default_agent(client))
+    dep_state = state[deployment_id]['status']
+    result = state[deployment_id]
+    print str(result)
+    if not result['ok']:
+        result[_HEALTHCHECK_FAILED] = 'wrong_state'
+        return state[deployment_id]
+    agents_alive, dep_alive = validate_agents.check_agents_alive(
+        deployment_id, result, version)
+    report.add_agents_alive_to_deployment(result, agents_alive)
+    if not dep_alive and assert_vms_agents_alive:
+        result[_HEALTHCHECK_FAILED] = 'agent_dead'
+        return result
+    if not check_vms_access:
+        return result
+    vm_access = validate_agents.check_vm_access(
+        deployment_id,
+        result,
+        report.get_agents_resource('validate_remote_access.py')
+    )
+    report.add_vm_access_to_deployment(result, vm_access)
+    vms_accessible = report.all_vms_accessible(result)
+    if not vms_accessible:
+        result[_HEALTHCHECK_FAILED] = 'vm_not_accessible'
+    return result
+
+
+def healthcheck_command(config):
+    res = healthcheck(config.deployment, config.version)
+    with open(config.output, 'w') as f:
+        f.write(json.dumps(res, indent=2))      
+    _mk_public(config.output)
+
+
 def health_check_and_dump(config):
+
     CHUNK_SIZE = 100
     dep_id = config.deployment
     data_path = _tempfile()
     events_path = _tempfile()
+    state_path = _tempfile()
     
     dump_storage_template = (
         'http://localhost:9200/'
@@ -81,19 +133,31 @@ def health_check_and_dump(config):
                         size=str(CHUNK_SIZE))
                 js = json.loads(get_chunk(cmd))
                 append_to_file(f, js)
+ 
     res = tarfile.TarFile(config.output, mode='w') 
-    with open(data_path, 'a') as f:
+    state = healthcheck(config.deployment, config.version)
+    _json_dump(state_path, state)
+    res.add(state_path, arcname='state.json')
+    if _HEALTHCHECK_FAILED in state:
+        res.close()
+        _mk_public(config.output)
+        return
+
+    with open(data_path, 'w') as f:
         # Storage dumping
         dump_chunks(f, dump_storage_template)
     res.add(data_path, arcname='data.json') 
-    with open(events_path, 'a') as f:
+    with open(events_path, 'w') as f:
         # Events dumping
         dump_chunks(f, dump_events_template)
     res.add(events_path, arcname='events.json')
+    res.close()
+    _mk_public(config.output)
 
-def call(command):
+
+def call(command, quiet=False):
     shlex_split = shlex.split(command)
-    if _VERBOSE:
+    if _VERBOSE and not quiet:
         pipes = None
     else:
         pipes = subprocess.PIPE
@@ -119,7 +183,7 @@ def recreate_deployment(config):
     archive = tarfile.TarFile(config.input)
     dep_dir = _tempdir()
     archive.extractall(dep_dir)
-    call(DEL_TEMPLATE.format(config.deployment))
+    call(DEL_TEMPLATE.format(config.deployment), quiet=True)
     client = CloudifyClient()
     create_dep_execution = client.executions.list(
         deployment_id=config.deployment
@@ -127,20 +191,31 @@ def recreate_deployment(config):
     call(UPDATE_EXEC_WORKFLOW_ID_TEMPLATE.format(
         execution_id=create_dep_execution.id,
         w_id='create_deployment_environment_3_2_1'
-    ))
+    ), quiet=True)
     call(BULK_TEMPLATE.format(
         file=os.path.join(dep_dir, 'data.json'),
         index='cloudify_storage'
-    ))
+    ), quiet=True)
     call(BULK_TEMPLATE.format(
         file=os.path.join(dep_dir, 'events.json'),
         index='cloudify_events'
-    ))
-    execution = client.executions.get(create_dep_execution.id)
-    while execution.status not in Execution.END_STATES:
-        time.sleep(2)
-        print 'Waiting for execution {0}'.format(create_dep_execution.id)
-        execution = client.executions.get(create_dep_execution.id)
+    ), quiet=True)
+    i = 1
+    state = healthcheck(config.deployment, config.version,
+                        assert_vms_agents_alive=False)
+    while i < 5 and _HEALTHCHECK_FAILED in state:
+        print 'Post recreate healtcheck failed - attempt {0}'.format(i)
+        time.sleep(4)
+        state = healthcheck(config.deployment, config.version,
+                            assert_vms_agents_alive=False)
+    if _HEALTHCHECK_FAILED not in state:
+        mgmt_workers_alive = state['workflows_worker_alive'] and state[
+            'operations_worker_alive']
+        if not mgmt_workers_alive:
+            state[_HEALTHCHECK_FAILED] = 'management_worker_dead'
+    _json_dump(config.output, state)
+    _mk_public(config.output)
+
 
 _ENVS = {
   '3.1.0': '/opt/manager',
@@ -149,16 +224,43 @@ _ENVS = {
 }
 
 
-def _perform_agent_operation(config):
-    env = _ENVS[config.version]
+def _perform_agent_operation(deployment, operation, version):
+    env = _ENVS[version]
     auth_path = _tempfile()
-    call('{0}/bin/python {1}/modify_agents.py {0} {4} 5 {2} {3}'.format(
-        env, _DIRECTORY, config.deployment, auth_path, config.operation
+    call('{0}/bin/python {1}/modify_agents.py {0} {4} 5 {2} {3} {5}'.format(
+        env, _DIRECTORY, deployment, auth_path, operation, version
     )) 
 
 
 def modify_agents(config):
-    _perform_agent_operation(config)
+    _perform_agent_operation(config.deployment, config.operation, config.version)
+
+
+def uninstall_agents(config):
+    _perform_agent_operation(config.deployment, 'uninstall', config.version)
+    state = healthcheck(config.deployment, config.version,
+                         assert_vms_agents_alive=False, check_vms_access=False)
+    if _HEALTHCHECK_FAILED not in state:
+        agent_alive = False
+        for agent in state['agents'].itervalues():
+            agent_alive = agent_alive or agent['alive']
+        if agent_alive:
+            state[_HEALTHCHECK_FAILED] = 'agent_alive'
+    _json_dump(config.output, state)
+    _mk_public(config.output)
+
+
+def install_agents(config):
+    _perform_agent_operation(config.deployment, 'install', config.version)
+    state = healthcheck(config.deployment, config.version)
+    i = 1
+    while i < 5 and _HEALTHCHECK_FAILED in state:
+        print 'Post install healtcheck failed - attempt {0}'.format(i)
+        time.sleep(4)
+        state = healthcheck(config.deployment, config.version)
+    _json_dump(config.output, state)
+    _mk_public(config.output)
+
 
 
 def _parser():
@@ -167,11 +269,14 @@ def _parser():
     health = subparsers.add_parser('healthcheck_and_dump')
     health.add_argument('--deployment', required=True)
     health.add_argument('--output', required=True)
+    health.add_argument('--version', required=True)
     health.set_defaults(func=health_check_and_dump)
 
     create = subparsers.add_parser('recreate_deployment')
     create.add_argument('--deployment', required=True)
     create.add_argument('--input', required=True)
+    create.add_argument('--output', required=True)
+    create.add_argument('--version', required=True)
     create.set_defaults(func=recreate_deployment)
 
     modify = subparsers.add_parser('modify_agents')
@@ -179,6 +284,26 @@ def _parser():
     modify.add_argument('--version', required=True)
     modify.add_argument('--operation', required=True)
     modify.set_defaults(func=modify_agents)
+
+    uninstall_p = subparsers.add_parser('uninstall_agents')
+    uninstall_p.add_argument('--deployment', required=True)
+    uninstall_p.add_argument('--version', required=True)
+    uninstall_p.add_argument('--output', required=True)
+    uninstall_p.set_defaults(func=uninstall_agents)
+
+
+    install_p = subparsers.add_parser('install_agents')
+    install_p.add_argument('--deployment', required=True)
+    install_p.add_argument('--version', required=True)
+    install_p.add_argument('--output', required=True)
+    install_p.set_defaults(func=install_agents)
+
+
+    healthcheck_p= subparsers.add_parser('healthcheck')
+    healthcheck_p.add_argument('--deployment', required=True)
+    healthcheck_p.add_argument('--version', required=True)
+    healthcheck_p.add_argument('--output', required=True)
+    healthcheck_p.set_defaults(func=healthcheck_command)
 
     return parser
 

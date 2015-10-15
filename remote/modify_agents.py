@@ -64,7 +64,7 @@ def main(args):
     max_attempts = args[3]
     deployment_id = args[4]
     auth_override = args[5]
-
+    version = args[6]
     with open(auth_override, 'r') as auth_stream:
         custom_auth = yaml.load(auth_stream) or {}
 
@@ -79,13 +79,14 @@ def main(args):
             'update',
             sm
         )
-        cmd = '/bin/bash -c "cd {0} && ./modify_agents.sh {1} {2} {3} {4} {5}"'.format(
+        cmd = '/bin/bash -c "cd {0} && ./modify_agents.sh {1} {2} {3} {4} {5} {6}"'.format(
             _DIRECTORY,
             deployment.blueprint_id,
             deployment.id,
             manager_venv,
             operation,
-            max_attempts
+            max_attempts,
+            version
         )
         ret = os.system(cmd)
     finally:

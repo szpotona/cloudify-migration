@@ -6,6 +6,7 @@ from datetime import datetime
 from manager_rest import models
 from manager_rest.storage_manager import instance as storage_manager_instance
 from manager_rest.workflow_client import workflow_client
+from celery import Celery
 
 import agents_utils as utils
 
@@ -102,6 +103,38 @@ def _wait_for_execution_finish(execution_id, attempt_limit, sm):
         return utils.EXIT_ERROR
     return utils.EXIT_OK
 
+_BROKER_URL = {
+    '3.1.0': 'amqp://guest:guest@127.0.0.1:5672//',
+    '3.2.0': 'amqp://guest:guest@127.0.0.1:5672//',
+    '3.2.1': 'amqp://cloudify:c10udify@127.0.0.1:5672//'
+}
+
+_SEPARATOR = {
+    '3.1.0': '.',
+    '3.2.0': '@',
+    '3.2.1': '@'
+}
+
+
+def _check_alive(celery, worker_name):
+    try:
+        tasks = celery.control.inspect([worker_name]).registered() or {}
+        worker_tasks = set(tasks.get(worker_name, {}))
+        return 'script_runner.tasks.run' in worker_tasks
+    except:
+        return False
+
+
+def _wait_for_workflows_worker(deployment, version):
+    broker_url = _BROKER_URL[version]
+    celery = Celery(broker=broker_url, backend=broker_url)
+    separator = _SEPARATOR[version]
+    name = 'celery{0}{1}_workflows'.format(separator, deployment)
+    while not _check_alive(celery, name):
+        print 'Waiting for worker {0}'.format(name)
+        time.sleep(3)
+    print 'Worker {0} alive'.format(name)
+
 
 def main(args):
     execution_id = str(uuid.uuid4())
@@ -109,11 +142,9 @@ def main(args):
     blueprint_id = args[1]
     deployment_id = args[2]
     op_name = args[3]
-
-    if len(args) > 4:
-        attempt_limit = int(args[4])
-    else:
-        attempt_limit = _DEFAULT_ATTEMPT_LIMIT
+    attempt_limit = int(args[4])
+    version = args[5]
+    _wait_for_workflows_worker(deployment_id, version)
     sm = storage_manager_instance()
     _start_workflow(blueprint_id, deployment_id, execution_id, op_name, sm)
     return _wait_for_execution_finish(
