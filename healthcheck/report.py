@@ -11,13 +11,13 @@ import traceback
 from cloudify_rest_client import CloudifyClient
 
 from distutils import spawn
-from subprocess import call
-
+import subprocess
 
 _DIRECTORY = os.path.dirname(os.path.realpath(__file__))
 _TENANTS = ''
 _USER = ''
 _MANAGER_KEY = ''
+_VERBOSE = True
 
 
 def _read(filename):
@@ -25,16 +25,46 @@ def _read(filename):
         return json.loads(f.read())
 
 
-def set_globals(config):
+def set_credentials(config):
     conf = _read(config.config)
-    global _TENANTS
     global _USER
     global _MANAGER_KEY
-    _TENANTS = conf['tenants']
     _USER = conf['user']
     _MANAGER_KEY = conf['manager_key']
-    if not _TENANTS or not _USER or not _MANAGER_KEY:
+    if not _USER or not _MANAGER_KEY:
         raise RuntimeError('Wrong configuration')
+
+
+def set_globals(config):
+    set_credentials(config)
+    conf = _read(config.config)
+    global _TENANTS
+    _TENANTS = conf['tenants']
+    if not _TENANTS:
+        raise RuntimeError('Wrong configuration')
+
+
+def get_override_credentials_rules_from_path(path):
+    conf = _read(path)
+    rules = dict((k, v) for k, v in conf.iteritems() if
+        k in ['windows_username', 'windows_password', 'unix_username', 'unix_keypath'] and v)
+    return rules
+
+
+def _get_override_credentials_rules(config):
+    return get_override_credentials_rules_from_path(config.config)
+
+
+def call(command_arr, quiet=False):
+    if _VERBOSE and not quiet:
+        pipes = None
+    else:
+        pipes = subprocess.PIPE
+    p = subprocess.Popen(command_arr, stdout=pipes,
+                         stderr=pipes)
+    out, err = p.communicate()
+    if p.returncode:
+        raise RuntimeError('Command {0} failed.'.format(command_arr))
 
 
 def get_rest_client(manager_ip):
@@ -52,15 +82,44 @@ class Command(object):
         pass
 
 
-def _get_agents_resource(resource):
+def get_agents_resource(resource):
     return os.path.join(_DIRECTORY, 'agents', resource)
 
 
-def _get_deployment_states(client, deployments, default_agent):
-    res = {}
+_UPDATE_CREDENTIALS_FIELDS = {
+    'unix': {
+        'unix_username': 'user',
+        'unix_keypath': 'key'
+    },
+    'windows': {
+        'windows_username': 'user',
+        'windows_password': 'password'
+    }
+}
+
+
+def prepare_credentials_override_actions(agents, credentials_override):
+    compute_nodes = {}
+    for agent in agents.itervalues():
+        compute_nodes[agent['node']] = {
+            'is_windows': agent['is_windows']
+        }
+    rules = {}
+    for node_name, node in compute_nodes.iteritems():
+        os_family = 'windows' if node['is_windows'] else 'unix'
+        node_rules = {}
+        for k, v in _UPDATE_CREDENTIALS_FIELDS[os_family].iteritems():
+            if k in credentials_override:
+                node_rules[v] = credentials_override[k]
+        if node_rules:
+              rules[node_name] = node_rules
+    return rules
+
+
+def get_deployment_states(client, deployments, default_agent, credentials_override):
     agents_count = 0
+    res = {}
     for deployment in deployments:
-        print 'Deployment {}'.format(deployment.id)
         dep_states = set()
         dep_agents = {}
         for node in client.nodes.list(deployment_id=deployment.id):
@@ -69,6 +128,7 @@ def _get_deployment_states(client, deployments, default_agent):
                 dep_states.add(node_instance.state)
                 if 'cloudify.nodes.Compute' in node.type_hierarchy:
                     current_agent = {
+                        'node': node.id,
                         'state': node_instance.state,
                         'ip': node_instance.runtime_properties.get(
                             'ip',
@@ -82,14 +142,17 @@ def _get_deployment_states(client, deployments, default_agent):
                     dep_agents[node_instance.id] = current_agent
                     agent_config = current_agent['cloudify_agent']
                     agent_config['host'] = current_agent['ip']
-                    if not current_agent['is_windows']:  # For windows agent whole config must be in node properties.
+                    if not current_agent['is_windows']:
                         if 'key' not in agent_config:
                             agent_config['key'] = default_agent['agent_key_path']
                         if 'user' not in agent_config:
                             agent_config['user'] = default_agent['user']
                         if 'port' not in agent_config:
                             agent_config['port'] = default_agent['remote_execution_port']
-
+        override = prepare_credentials_override_actions(dep_agents, credentials_override)
+        for agent in dep_agents.itervalues():
+            if agent['node'] in override:
+                agent['cloudify_agent'].update(override[agent['node']])
         if len(dep_states) > 1:
             status = 'mixed'
         elif len(dep_states) == 1:
@@ -102,7 +165,7 @@ def _get_deployment_states(client, deployments, default_agent):
         res[deployment.id] = {
             'status': status,
             'agents': dep_agents,
-            'ok': status in ['empty', 'started'],
+            'ok': status == 'started',
             'states': list(dep_states),
             'executions': executions}
     return res, agents_count
@@ -126,22 +189,23 @@ def _has_multi_sec_nodes(blueprint):
 
 
 def insert_blueprint_report(res, client, blueprint, deployments, config,
-                            default_agent):
+                            default_agent, overrides):
+    print 'Blueprint {}'.format(blueprint.id)
     res['multi_sec_nodes'] = _has_multi_sec_nodes(blueprint)
     deployments = [
         dep for dep in deployments if dep.blueprint_id == blueprint.id]
     res['deployments_count'] = len(deployments)
     res['deployments'], res[
-        'agents_count'] = _get_deployment_states(client, deployments, default_agent)
+        'agents_count'] = get_deployment_states(client, deployments, default_agent, overrides)
 
 
-def _get_blueprints(client, blueprints, deployments, config, default_agent):
+def _get_blueprints(client, blueprints, deployments, config, default_agent, overrides):
     threads = []
     res = {}
     for blueprint in blueprints:
         res[blueprint.id] = {}
         thread = threading.Thread(target=insert_blueprint_report, args=(
-            res[blueprint.id], client, blueprint, deployments, config, default_agent))
+            res[blueprint.id], client, blueprint, deployments, config, default_agent, overrides))
         thread.start()
         threads.append(thread)
     for thread in threads:
@@ -186,7 +250,7 @@ class ManagerHandler(object):
             command += [local_path, management_path]
         else:
             command += [management_path, local_path]
-        if call(command):
+        if call(command, quiet=True):
             raise RuntimeError(
                 'Could not scp to/from manager: {0}'.format(command))
 
@@ -201,7 +265,7 @@ class ManagerHandler(object):
 
     def execute(self, cmd, timeout=900):
         time.sleep(4)
-        ssh_cmd = ['ssh', '-o', 'StrictHostKeyChecking=no', '-i',
+        ssh_cmd = ['ssh',  '-o', 'ServerAliveInterval=30', '-o', 'StrictHostKeyChecking=no', '-i',
                    os.path.expanduser(_MANAGER_KEY), '{0}@{1}'.format(
                        _USER, self.manager_ip), '-C', cmd]
         if timeout:
@@ -209,11 +273,10 @@ class ManagerHandler(object):
             cmd_list.extend(ssh_cmd)
         else:
             cmd_list = ssh_cmd
-        print 'executing {0}'.format(cmd_list)
         result = call(cmd_list)
         if result:
             raise RuntimeError(
-                'Could not execute remote command "{0}"'.format(cmd))
+                'Could not execute remote command "{0}"'.format(cmd_list))
 
     def files(self):
         return FileManager(self)
@@ -260,7 +323,7 @@ class FileManager(object):
         return self
 
     def __exit__(self, type, value, traceback):
-        self.handler.execute('rm -rf {0}'.format(self.path))
+        self.handler.execute('sudo rm -rf {0}'.format(self.path))
 
     def filename(self):
         return '_tmp_file{0}'.format(uuid.uuid4())
@@ -277,11 +340,38 @@ class FileManager(object):
         return self.handler.container_path(self.directory, filename), out_path
 
 
-def _get_handler(version, ip):
+def get_handler(version, ip):
     if version.startswith('3.1'):
         return ManagerHandler31(ip)
     else:
         return ManagerHandler32(ip)
+
+
+def add_agents_alive_to_deployment(deployment, agents_alive):
+    deployment['workflows_worker_alive'] = agents_alive[
+        'workflows_worker_alive']
+    deployment['operations_worker_alive'] = agents_alive[
+        'operations_worker_alive']
+    dep_alive = deployment['workflows_worker_alive'] and deployment[
+        'operations_worker_alive']
+    for agent_name, alive in agents_alive[
+            'agents_alive'].iteritems():
+        deployment['agents'][agent_name]['alive'] = alive
+        dep_alive = dep_alive and alive
+    deployment['alive'] = dep_alive
+ 
+ 
+def add_vm_access_to_deployment(deployment, vm_access):
+    if 'agents_remote_access_error' in vm_access:
+        deployment['agents_remote_access_error'] = vm_access[
+            'agents_remote_access_error'] 
+    for agent_name, remote_access in vm_access.get(
+            'agents_remote_access', {}).iteritems():
+        deployment['agents'][agent_name][
+            'vm_accessible'] = remote_access['can_connect']
+        if 'error' in remote_access:
+            deployment['agents'][agent_name][
+                'error_vm_accessible'] = remote_access['error']
 
 
 def _add_agents_alive_info(env_result, config, handler, files):
@@ -297,8 +387,8 @@ def _add_agents_alive_info(env_result, config, handler, files):
     with open(path, 'w') as f:
         f.write(json.dumps(deployments))
     input_file, _ = files.send(path)
-    script, _ = files.send(_get_agents_resource('validate_agents.py'))
-    remote_access_script, _ = files.send(_get_agents_resource(
+    script, _ = files.send(get_agents_resource('validate_agents.py'))
+    remote_access_script, _ = files.send(get_agents_resource(
         'validate_remote_access.py'))
     cont_result, load_result = files.get_path()
     if config.test_agents_vm_access:
@@ -314,30 +404,15 @@ def _add_agents_alive_info(env_result, config, handler, files):
         for name, deployment in blueprint['deployments'].iteritems():
             if name in result_deployments:
                 res_deployment = result_deployments[name]
-                deployment['workflows_worker_alive'] = res_deployment[
-                    'workflows_worker_alive']
-                deployment['operations_worker_alive'] = res_deployment[
-                    'operations_worker_alive']
-                dep_alive = deployment['workflows_worker_alive'] and deployment[
-                    'operations_worker_alive']
-                for agent_name, alive in res_deployment[
-                        'agents_alive'].iteritems():
-                    deployment['agents'][agent_name]['alive'] = alive
-                    dep_alive = dep_alive and alive
-                deployment['alive'] = dep_alive
-                if 'agents_remote_access_error' in res_deployment:
-                    deployment['agents_remote_access_error'] = res_deployment[
-                        'agents_remote_access_error'] 
-                for agent_name, remote_access in res_deployment.get(
-                        'agents_remote_access', {}).iteritems():
-                    deployment['agents'][agent_name][
-                        'vm_accessible'] = remote_access['can_connect']
-                    if 'error' in remote_access:
-                        deployment['agents'][agent_name][
-                            'error_vm_accessible'] = remote_access['error']
+                add_agents_alive_to_deployment(deployment, res_deployment)
+                add_vm_access_to_deployment(deployment, res_deployment)
 
 
-def prepare_report(result, env, config):
+def get_default_agent(client):
+    return client.manager.get_context()['context'][
+        'cloudify']['cloudify_agent']
+  
+def prepare_report(result, env, config, overrides):
     ip = env['config']['MANAGER_IP_ADDRESS']
     result['ip'] = ip
     if env.get('inactive'):
@@ -351,8 +426,7 @@ def prepare_report(result, env, config):
         return
     os.remove(temp)
     client = get_rest_client(manager_ip=ip)
-    default_agent = client.manager.get_context()['context'][
-        'cloudify']['cloudify_agent']
+    default_agent = get_default_agent(client)
     result['version'] = client.manager.get_version()['version']
     if config.blueprints_states:
         deployments = client.deployments.list()
@@ -361,17 +435,17 @@ def prepare_report(result, env, config):
         else:
             blueprints = client.blueprints.list()
         result['blueprints'], result['agents_count'] = _get_blueprints(
-            client, blueprints, deployments, config, default_agent)
+            client, blueprints, deployments, config, default_agent, overrides)
         result['deployments_count'] = len(deployments)
         result['blueprints_count'] = len(blueprints)
     if config.test_manager_ssh:
-        handler = _get_handler(result['version'], ip)
+        handler = get_handler(result['version'], ip)
         try:
             handler.execute('echo test > /dev/null', timeout=4)
             content = str(uuid.uuid4())
             with handler.files() as files:
                 tmp_file, _ = files.send(
-                    _get_agents_resource('validate_manager_env.py'))
+                    get_agents_resource('validate_manager_env.py'))
                 cont_res, load_res = files.get_path()
                 handler.python_call('{0} {1} {2}'.format(
                     tmp_file, cont_res, content))
@@ -380,8 +454,8 @@ def prepare_report(result, env, config):
                         res = f.read()
                         if res != content:
                             raise RuntimeError(
-                                'Invalid result retrieved, expected {0}, got {1}'.format(
-                                    content, res))
+                                'Invalid result retrieved, expected {0}, got '
+                                '{1}'.format(content, res))
                 result['manager_ssh'] = True
                 if config.test_agents_alive:
                     _add_agents_alive_info(result, config, handler, files)
@@ -392,9 +466,9 @@ def prepare_report(result, env, config):
     return result
 
 
-def insert_env_report(env_result, env, config):
+def insert_env_report(env_result, env, config, overrides):
     try:
-        prepare_report(env_result, env, config)
+        prepare_report(env_result, env, config, overrides)
     except Exception as e:
         traceback.print_exc()
         env_result[
@@ -433,9 +507,9 @@ class Generate(Command):
 
     def perform(self, config):
         set_globals(config)
+        overrides = _get_override_credentials_rules(config)
         res = {}
         try:
-            print _TENANTS
             tenants, _ = urllib.urlretrieve(_TENANTS)
             managers = _read(tenants)
             if config.manager:
@@ -462,7 +536,7 @@ class Generate(Command):
                 for env_name, env in manager['environments'].iteritems():
                     env_result = {}
                     thread = threading.Thread(target=insert_env_report,
-                                              args=(env_result, env, config))
+                                              args=(env_result, env, config, overrides))
                     thread.start()
                     threads.append(thread)
                     mgr_result[env_name] = env_result
@@ -480,6 +554,13 @@ class Generate(Command):
                 res[key] = val
         finally:
             _output(config, res)
+
+
+def all_vms_accessible(deployment):
+    vm_access = True
+    for agent in deployment.get('agents', []).itervalues():
+        vm_access = vm_access and agent.get('vm_accessible', False)
+    return vm_access 
 
 
 class ToCsv(Command):
@@ -533,16 +614,13 @@ class ToCsv(Command):
                         for dp_name, dp in bpt['deployments'].iteritems():
                             state = dp['status']
                             alive = dp.get('alive', 'skipped')
-                            valid = state in ['started',
-                                              'empty'] and alive is True
+                            valid = state =='started' and alive is True
                             deployments_count = deployments_count + 1
                             has_windows_computes = False
                             for agent in dp.get('agents', []).itervalues():
                                 has_windows_computes = has_windows_computes or agent.get('is_windows', False)
                             if valid:
-                                vm_access = True
-                                for agent in dp.get('agents', []).itervalues():
-                                    vm_access = vm_access and agent.get('vm_accessible', False)
+                                vm_access = all_vms_accessible(dp)
                             else:
                                 vm_access = 'skipped'
                             valid = valid and vm_access

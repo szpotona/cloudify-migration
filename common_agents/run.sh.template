@@ -1,9 +1,0 @@
-#!/bin/bash
-
-# should be replaced with proper values:
-MANAGER_ENV=__MANAGER_ENV__
-OPERATION=__OPERATION__
-MAX_ATTEMPTS=__MAX_ATTEMPTS__
-
-$MANAGER_ENV/bin/python run.py $MANAGER_ENV $OPERATION $MAX_ATTEMPTS
-
