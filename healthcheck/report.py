@@ -44,6 +44,13 @@ def set_globals(config):
         raise RuntimeError('Wrong configuration')
 
 
+def _get_override_credentials_rules(config):
+    conf = _read(config.config)
+    rules = dict((k, v) for k, v in conf.iteritems() if
+        k in ['windows_username', 'windows_password', 'unix_username', 'unix_keypath'] and v)
+    return rules
+
+
 def call(command_arr, quiet=False):
     if _VERBOSE and not quiet:
         pipes = None
@@ -75,11 +82,39 @@ def get_agents_resource(resource):
     return os.path.join(_DIRECTORY, 'agents', resource)
 
 
-def get_deployment_states(client, deployments, default_agent, windows_override=None):
-    res = {}
-    if windows_override is None:
-        windows_override = {}
+_UPDATE_CREDENTIALS_FIELDS = {
+    'unix': {
+        'unix_username': 'user',
+        'unix_keypath': 'key'
+    },
+    'windows': {
+        'windows_username': 'user',
+        'windows_password': 'password'
+    }
+}
+
+
+def prepare_credentials_override_actions(agents, credentials_override):
+    compute_nodes = {}
+    for agent in agents.itervalues():
+        compute_nodes[agent['node']] = {
+            'is_windows': agent['is_windows']
+        }
+    rules = {}
+    for node_name, node in compute_nodes.iteritems():
+        os_family = 'windows' if node['is_windows'] else 'unix'
+        node_rules = {}
+        for k, v in _UPDATE_CREDENTIALS_FIELDS[os_family].iteritems():
+            if k in credentials_override:
+                node_rules[v] = credentials_override[k]
+        if node_rules:
+              rules[node_name] = node_rules
+    return rules
+
+
+def get_deployment_states(client, deployments, default_agent, credentials_override):
     agents_count = 0
+    res = {}
     for deployment in deployments:
         dep_states = set()
         dep_agents = {}
@@ -89,6 +124,7 @@ def get_deployment_states(client, deployments, default_agent, windows_override=N
                 dep_states.add(node_instance.state)
                 if 'cloudify.nodes.Compute' in node.type_hierarchy:
                     current_agent = {
+                        'node': node.id,
                         'state': node_instance.state,
                         'ip': node_instance.runtime_properties.get(
                             'ip',
@@ -102,15 +138,17 @@ def get_deployment_states(client, deployments, default_agent, windows_override=N
                     dep_agents[node_instance.id] = current_agent
                     agent_config = current_agent['cloudify_agent']
                     agent_config['host'] = current_agent['ip']
-                    if not current_agent['is_windows']:  # For windows agent whole config must be in node properties.
+                    if not current_agent['is_windows']:
                         if 'key' not in agent_config:
                             agent_config['key'] = default_agent['agent_key_path']
                         if 'user' not in agent_config:
                             agent_config['user'] = default_agent['user']
                         if 'port' not in agent_config:
                             agent_config['port'] = default_agent['remote_execution_port']
-                    else:
-                        agent_config.update(windows_override)
+        override = prepare_credentials_override_actions(dep_agents, credentials_override)
+        for agent in dep_agents.itervalues():
+            if agent['node'] in override:
+                agent['cloudify_agent'].update(override[agent['node']])
         if len(dep_states) > 1:
             status = 'mixed'
         elif len(dep_states) == 1:
@@ -147,23 +185,23 @@ def _has_multi_sec_nodes(blueprint):
 
 
 def insert_blueprint_report(res, client, blueprint, deployments, config,
-                            default_agent):
+                            default_agent, overrides):
     print 'Blueprint {}'.format(blueprint.id)
     res['multi_sec_nodes'] = _has_multi_sec_nodes(blueprint)
     deployments = [
         dep for dep in deployments if dep.blueprint_id == blueprint.id]
     res['deployments_count'] = len(deployments)
     res['deployments'], res[
-        'agents_count'] = get_deployment_states(client, deployments, default_agent)
+        'agents_count'] = get_deployment_states(client, deployments, default_agent, overrides)
 
 
-def _get_blueprints(client, blueprints, deployments, config, default_agent):
+def _get_blueprints(client, blueprints, deployments, config, default_agent, overrides):
     threads = []
     res = {}
     for blueprint in blueprints:
         res[blueprint.id] = {}
         thread = threading.Thread(target=insert_blueprint_report, args=(
-            res[blueprint.id], client, blueprint, deployments, config, default_agent))
+            res[blueprint.id], client, blueprint, deployments, config, default_agent, overrides))
         thread.start()
         threads.append(thread)
     for thread in threads:
@@ -281,7 +319,7 @@ class FileManager(object):
         return self
 
     def __exit__(self, type, value, traceback):
-        self.handler.execute('rm -rf {0}'.format(self.path))
+        self.handler.execute('sudo rm -rf {0}'.format(self.path))
 
     def filename(self):
         return '_tmp_file{0}'.format(uuid.uuid4())
@@ -370,7 +408,7 @@ def get_default_agent(client):
     return client.manager.get_context()['context'][
         'cloudify']['cloudify_agent']
   
-def prepare_report(result, env, config):
+def prepare_report(result, env, config, overrides):
     ip = env['config']['MANAGER_IP_ADDRESS']
     result['ip'] = ip
     if env.get('inactive'):
@@ -393,7 +431,7 @@ def prepare_report(result, env, config):
         else:
             blueprints = client.blueprints.list()
         result['blueprints'], result['agents_count'] = _get_blueprints(
-            client, blueprints, deployments, config, default_agent)
+            client, blueprints, deployments, config, default_agent, overrides)
         result['deployments_count'] = len(deployments)
         result['blueprints_count'] = len(blueprints)
     if config.test_manager_ssh:
@@ -424,9 +462,9 @@ def prepare_report(result, env, config):
     return result
 
 
-def insert_env_report(env_result, env, config):
+def insert_env_report(env_result, env, config, overrides):
     try:
-        prepare_report(env_result, env, config)
+        prepare_report(env_result, env, config, overrides)
     except Exception as e:
         traceback.print_exc()
         env_result[
@@ -465,9 +503,9 @@ class Generate(Command):
 
     def perform(self, config):
         set_globals(config)
+        overrides = _get_override_credentials_rules(config)
         res = {}
         try:
-            print _TENANTS
             tenants, _ = urllib.urlretrieve(_TENANTS)
             managers = _read(tenants)
             if config.manager:
@@ -494,7 +532,7 @@ class Generate(Command):
                 for env_name, env in manager['environments'].iteritems():
                     env_result = {}
                     thread = threading.Thread(target=insert_env_report,
-                                              args=(env_result, env, config))
+                                              args=(env_result, env, config, overrides))
                     thread.start()
                     threads.append(thread)
                     mgr_result[env_name] = env_result

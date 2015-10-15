@@ -24,7 +24,7 @@ def _prepare_auth_updates(auth_dict, sm):
             revert_actions.append((node, agent_properties))
             agent_properties = agent_properties.copy()
             for key in agent_config.keys():
-                if key not in ['user', 'password']:
+                if key not in ['user', 'password', 'key']:
                     raise Exception(
                         'Key {0} not allowed in auth config'.format(key))
                 new_value = agent_config.get(key)
