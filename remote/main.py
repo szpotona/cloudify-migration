@@ -43,7 +43,6 @@ def healthcheck(deployment_id, version, assert_vms_agents_alive=True, check_vms_
         client , [deployment], report.get_default_agent(client))
     dep_state = state[deployment_id]['status']
     result = state[deployment_id]
-    print str(result)
     if not result['ok']:
         result[_HEALTHCHECK_FAILED] = 'wrong_state'
         return state[deployment_id]
@@ -172,7 +171,7 @@ def call(command, quiet=False):
 DEL_TEMPLATE = ("curl -s -XDELETE 'http://localhost:9200/"
                 "cloudify_storage/node_instance/_query?q=deployment_id:{} '")
 BULK_TEMPLATE = ("curl -s XPOST 'http://localhost:9200/"
-                 "{index}/_bulk' --data-binary @{file}")
+                 "{index}/_bulk?refresh=1' --data-binary @{file}")
 UPDATE_EXEC_WORKFLOW_ID_TEMPLATE = (
     "curl -s XPOST 'http://localhost:9200/cloudify_storage/execution/"
     "{execution_id}/_update' -d '{{\"doc\":{{\"workflow_id\":\"{w_id}\"}}}}'"
@@ -200,14 +199,8 @@ def recreate_deployment(config):
         file=os.path.join(dep_dir, 'events.json'),
         index='cloudify_events'
     ), quiet=True)
-    i = 1
     state = healthcheck(config.deployment, config.version,
                         assert_vms_agents_alive=False)
-    while i < 5 and _HEALTHCHECK_FAILED in state:
-        print 'Post recreate healtcheck failed - attempt {0}'.format(i)
-        time.sleep(4)
-        state = healthcheck(config.deployment, config.version,
-                            assert_vms_agents_alive=False)
     if _HEALTHCHECK_FAILED not in state:
         mgmt_workers_alive = state['workflows_worker_alive'] and state[
             'operations_worker_alive']
@@ -258,6 +251,7 @@ def install_agents(config):
         print 'Post install healtcheck failed - attempt {0}'.format(i)
         time.sleep(4)
         state = healthcheck(config.deployment, config.version)
+        i = i + 1
     _json_dump(config.output, state)
     _mk_public(config.output)
 

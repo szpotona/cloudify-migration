@@ -6,7 +6,7 @@ if [[ $# -lt 6 ]]; then
     exit 1
 fi
 
-echo "Running operation $4 for deployment $2"
+echo "Running agent operation $4 for deployment $2"
 source /etc/default/celeryd-${2}_workflows
 cp software_replacement_workflow.py ${VIRTUALENV}/lib/python2.7/site-packages
 cp ${CELERY_WORK_DIR}/celeryd-includes ${CELERY_WORK_DIR}/celeryd-includes.backup

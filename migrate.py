@@ -196,12 +196,22 @@ def _wait_for_execution(execution_id, client):
         print 'Waiting for execution {0}'.format(execution_id)
         execution = client.executions.get(execution_id)
 
-
+def _log_msg(deployment_id, msg, logpath):
+    message = '{0}: <{1}> {2}\n'.format(
+        datetime.datetime.now(),
+        deployment_id,
+        msg
+    )
+    print message
+    with open(logpath, 'a') as f:
+        f.write(message)
+ 
 def _perform_migration(deployment, existing_deployments,
                        source_runner, target_runner, logpath):
     done = False
     retry = False
     result = {}
+    _log_msg(deployment.id, 'starting migration', logpath)
     while not done:
         internal_error = False
         try:
@@ -236,21 +246,20 @@ def _perform_migration(deployment, existing_deployments,
             elif answer == 'retry':
                 retry = True
             else:
+                msg = '{0}, phase {1}, error: {2}'.format(
+                    'aborted', phase, error
+                )
+                _log_msg(deployment.id, msg, logpath) 
                 raise RuntimeError('Migration aborted')
-    
+
+
     if migration_state == 'migrated':
-        status = 'migrated'
+        msg = 'migrated'
     else:
-        status = '{0}, phase {1}, error: {2}'.format(
+        msg = '{0}, phase {1}, error: {2}'.format(
             migration_state, phase, error
         )
-    msg = '{0}: <{1}> {2}\n'.format(
-        datetime.datetime.now(),
-        deployment.id,
-        status
-    ) 
-    with open(logpath, 'a') as f:
-        f.write(msg)
+    _log_msg(deployment.id, msg, logpath)
 
 
 def _migrate_deployment(deployment, existing_deployments,
