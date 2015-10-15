@@ -1,5 +1,9 @@
 {
   "tenants": "",
   "user": "ubuntu",
-  "manager_key": "/home/kp/vms/main_13/kp_cloudify-manager-kp.pem"
+  "manager_key": "/home/kp/vms/main_13/kp_cloudify-manager-kp.pem",
+  "windows_username": "",
+  "windows_password": "",
+  "unix_username": "",
+  "unix_keypath": ""
 }

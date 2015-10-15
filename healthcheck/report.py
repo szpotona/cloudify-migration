@@ -44,11 +44,15 @@ def set_globals(config):
         raise RuntimeError('Wrong configuration')
 
 
-def _get_override_credentials_rules(config):
-    conf = _read(config.config)
+def get_override_credentials_rules_from_path(path):
+    conf = _read(path)
     rules = dict((k, v) for k, v in conf.iteritems() if
         k in ['windows_username', 'windows_password', 'unix_username', 'unix_keypath'] and v)
     return rules
+
+
+def _get_override_credentials_rules(config):
+    return get_override_credentials_rules_from_path(config.config)
 
 
 def call(command_arr, quiet=False):

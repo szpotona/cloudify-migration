@@ -35,17 +35,26 @@ def _json_dump(path, content):
 def _mk_public(path):
     os.chmod(path, 0o666)
 
- 
-def healthcheck(deployment_id, version, assert_vms_agents_alive=True, check_vms_access=True):
-    client = CloudifyClient()
+
+def get_override_credentials_rules():
+    return report.get_override_credentials_rules_from_path(os.path.join(_DIRECTORY, 'config.json'))
+
+
+def get_deployment_state(deployment_id, client=None):
+    if client is None:
+          client = CloudifyClient()
+    override = get_override_credentials_rules()
     deployment = client.deployments.get(deployment_id)
     state, _ = report.get_deployment_states(
-        client , [deployment], report.get_default_agent(client))
-    dep_state = state[deployment_id]['status']
-    result = state[deployment_id]
+        client , [deployment], report.get_default_agent(client), override)
+    return state[deployment_id]
+
+ 
+def healthcheck(deployment_id, version, assert_vms_agents_alive=True, check_vms_access=True):
+    result = get_deployment_state(deployment_id)
     if not result['ok']:
         result[_HEALTHCHECK_FAILED] = 'wrong_state'
-        return state[deployment_id]
+        return result
     agents_alive, dep_alive = validate_agents.check_agents_alive(
         deployment_id, result, version)
     report.add_agents_alive_to_deployment(result, agents_alive)
@@ -220,6 +229,10 @@ _ENVS = {
 def _perform_agent_operation(deployment, operation, version):
     env = _ENVS[version]
     auth_path = _tempfile()
+    state = get_deployment_state(deployment)
+    override = get_override_credentials_rules()
+    actions = report.prepare_credentials_override_actions(state['agents'], override)
+    _json_dump(auth_path, actions)
     call('{0}/bin/python {1}/modify_agents.py {0} {4} 5 {2} {3} {5}'.format(
         env, _DIRECTORY, deployment, auth_path, operation, version
     )) 
