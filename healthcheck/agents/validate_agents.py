@@ -64,6 +64,7 @@ def check_vm_access(deployment_id, deployment, test_vm_script):
  
 
 def _insert_deployment_result(dep_res, deployment_id, deployment, version, test_vm_access, test_vm_script):
+    print 'On manager: deployment {0}'.format(deployment_id)
     result, dep_alive = check_agents_alive(deployment_id, deployment, version)
     dep_res.update(result)
     if not dep_alive or not test_vm_access:

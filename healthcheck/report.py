@@ -535,7 +535,7 @@ class Generate(Command):
                         manager['environments'] = envs
                         new_managers[name] = manager
                 managers = new_managers
-            if 'deployments_auth_override_path' in cf:
+            if cf.get('deployments_auth_override_path'):
                 manager_specific_overrides = _read(cf['deployments_auth_override_path'])
             else:
                 manager_specific_overrides = {}
@@ -605,13 +605,15 @@ class ToCsv(Command):
                 'last_execution_start_date',
                 'last_execution_start_time',
             ))
-            summary.write('{0},{1},{2},{3},{4},{5}\n'.format(
+            summary.write('{0},{1},{2},{3},{4},{5},{6},{7}\n'.format(
                 'manager',
                 'env',
                 'version',
                 'all_deployments',
                 'valid_deployments',
-                'checked'
+                'checked',
+                'expected vms',
+                'alive vms'
             ))
 
             for mgr_name, manager in raport['managers'].iteritems():
@@ -622,6 +624,8 @@ class ToCsv(Command):
                     ip = env['ip']
                     deployments_count = 0
                     valid_deployments_count = 0
+                    started_agents = 0
+                    alive_agents = 0
                     for bpt_name, bpt in env.get('blueprints', {}).iteritems():
                         multi_sec_group = bpt.get('multi_sec_nodes', '')
                         for dp_name, dp in bpt['deployments'].iteritems():
@@ -630,8 +634,12 @@ class ToCsv(Command):
                             valid = state =='started' and alive is True
                             deployments_count = deployments_count + 1
                             has_windows_computes = False
-                            for agent in dp.get('agents', []).itervalues():
+                            for agent in dp.get('agents', {}).itervalues():
                                 has_windows_computes = has_windows_computes or agent.get('is_windows', False)
+                                if agent.get('state', '') == 'started':
+                                    started_agents = started_agents + 1
+                                if agent.get('alive'):
+                                    alive_agents = alive_agents + 1
                             if valid:
                                 vm_access = all_vms_accessible(dp)
                             else:
@@ -665,13 +673,15 @@ class ToCsv(Command):
                                     date,
                                     time))
                     summary.write(
-                        '{0},{1},{2},{3},{4},{5}\n'.format(
+                        '{0},{1},{2},{3},{4},{5},{6},{7}\n'.format(
                             mgr_name,
                             env_name,
                             version,
                             deployments_count,
                             valid_deployments_count,
-                            checked))
+                            checked,
+                            started_agents,
+                            alive_agents))
 
 _COMMANDS = [
     Generate,
