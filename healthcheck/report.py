@@ -500,7 +500,7 @@ class Generate(Command):
         parser.add_argument('--config', default='config.json')
         parser.add_argument('--manager')
         parser.add_argument('--env')
-        parser.add_argument('--output')
+        parser.add_argument('--output', required=True)
         parser.add_argument('--deployment')
         parser.add_argument('--blueprints-states',
                             default=False, action='store_true')
