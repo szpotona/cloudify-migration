@@ -27,6 +27,11 @@ def _tempdir():
     return tempfile.mkdtemp(dir=os.path.join(_DIRECTORY, 'tmp'))
 
 
+def _json_load(path):
+    with open(path) as f:
+        return json.loads(f.read())
+
+
 def _json_dump(path, content):
     with open(path, 'w') as f:
         f.write(json.dumps(content, indent=2))
@@ -36,14 +41,18 @@ def _mk_public(path):
     os.chmod(path, 0o666)
 
 
-def get_override_credentials_rules():
-    return report.get_override_credentials_rules_from_path(os.path.join(_DIRECTORY, 'config.json'))
+def get_override_credentials_rules(deployment_id):
+    auth = _json_load(os.path.join(_DIRECTORY, 'auth.json'))
+    deployment_specific = auth.get(deployment_id, {})
+    res = report.get_override_credentials_rules_from_path(os.path.join(_DIRECTORY, 'config.json'))
+    res['deployment'] = deployment_specific
+    return res
 
 
 def get_deployment_state(deployment_id, client=None):
     if client is None:
           client = CloudifyClient()
-    override = get_override_credentials_rules()
+    override = get_override_credentials_rules(deployment_id)
     deployment = client.deployments.get(deployment_id)
     state, _ = report.get_deployment_states(
         client , [deployment], report.get_default_agent(client), override)
@@ -230,7 +239,7 @@ def _perform_agent_operation(deployment, operation, version):
     env = _ENVS[version]
     auth_path = _tempfile()
     state = get_deployment_state(deployment)
-    override = get_override_credentials_rules()
+    override = get_override_credentials_rules(deployment)
     actions = report.prepare_credentials_override_actions(state['agents'], override)
     _json_dump(auth_path, actions)
     call('{0}/bin/python {1}/modify_agents.py {0} {4} 5 {2} {3} {5}'.format(

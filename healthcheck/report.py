@@ -105,12 +105,16 @@ def prepare_credentials_override_actions(agents, credentials_override):
             'is_windows': agent['is_windows']
         }
     rules = {}
+    deployment_specific = credentials_override.get('deployment', {})
     for node_name, node in compute_nodes.iteritems():
         os_family = 'windows' if node['is_windows'] else 'unix'
         node_rules = {}
+        node_default = deployment_specific.get(node_name, {})
         for k, v in _UPDATE_CREDENTIALS_FIELDS[os_family].iteritems():
             if k in credentials_override:
                 node_rules[v] = credentials_override[k]
+            if k in node_default:
+                node_rules[v] = node_default[k]
         if node_rules:
               rules[node_name] = node_rules
     return rules

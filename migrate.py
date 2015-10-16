@@ -174,12 +174,20 @@ def migrate_blueprints(source_runner, target_runner):
 def install_code(handler, directory, config):
     path = tempfile.mkdtemp()
     try:
+        conf = _json_load(config.config)
+        auth_path = conf.get('deployments_auth_override_path')
+        if auth_path:
+            auth = _json_load(auth_path)
+        else:
+            auth = {}
+        with open(os.path.join(_DIRECTORY, 'remote', 'auth.json'), 'w') as f:
+            f.write(json.dumps(auth))
         arch_path = os.path.join(path, 'arch.tar.gz')
         call('cp -rf {0}/healthcheck {0}/remote'.format(_DIRECTORY))
         call('cp {0} {1}/remote/config.json'.format(config.config, _DIRECTORY))
         call('bash -c "cd {1}/remote ; tar -cf {0} *;"'.format(arch_path, _DIRECTORY))
         call('rm -rf {0}/remote/healthcheck'.format(_DIRECTORY))
-        call('rm {0}/remote/config.json'.format(_DIRECTORY))
+        call('rm {0}/remote/config.json {0}/remote/auth.json'.format(_DIRECTORY))
         handler.execute('mkdir -p {0}'.format(directory))
         handler.send_file(arch_path, directory)
         handler.execute('tar xf {0} -C {1} && cd {1} && mkdir -p tmp'.format(
