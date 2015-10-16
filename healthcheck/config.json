@@ -1,5 +1,10 @@
 {
   "tenants": "",
   "user": "cloudify",
-  "manager_key": ""
+  "manager_key": "",
+  "windows_username": "",
+  "windows_password": "",
+  "unix_username": "",
+  "unix_keypath": "",
+  "deployments_auth_override_path": ""
 }

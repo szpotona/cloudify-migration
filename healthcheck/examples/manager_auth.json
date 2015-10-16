@@ -1,0 +1,11 @@
+{
+  "CLOUDIFY": {
+    "dev": {
+      "WAS_single": {
+        "webspherevm": {
+          "unix_username": "random_username"
+        }
+      }
+    }
+  }
+}
