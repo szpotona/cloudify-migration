@@ -11,8 +11,12 @@ Run python migrate.py cleanup for both managers
 
 # Commands
 init - initializes environment for this script. It should be run before any other commands.
+
 migrate - migration itself
+
 cleanup - cleanup after migration
+
 agents - it can be used for agent installation/uninstallation for specific deployment
+
 healthcheck - runs healthcheck for specific deployment
 
