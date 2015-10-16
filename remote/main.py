@@ -53,9 +53,11 @@ def get_deployment_state(deployment_id, client=None):
     if client is None:
           client = CloudifyClient()
     override = get_override_credentials_rules(deployment_id)
+    dep_overrides = {}
+    dep_overrides[deployment_id] = override['deployment']
     deployment = client.deployments.get(deployment_id)
     state, _ = report.get_deployment_states(
-        client , [deployment], report.get_default_agent(client), override)
+        client , [deployment], report.get_default_agent(client), override, dep_overrides)
     return state[deployment_id]
 
  

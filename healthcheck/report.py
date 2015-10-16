@@ -1,4 +1,5 @@
 import argparse
+import copy
 import json
 import os
 import urllib
@@ -120,7 +121,7 @@ def prepare_credentials_override_actions(agents, credentials_override):
     return rules
 
 
-def get_deployment_states(client, deployments, default_agent, credentials_override):
+def get_deployment_states(client, deployments, default_agent, credentials_override, deployment_overrides):
     agents_count = 0
     res = {}
     for deployment in deployments:
@@ -153,7 +154,9 @@ def get_deployment_states(client, deployments, default_agent, credentials_overri
                             agent_config['user'] = default_agent['user']
                         if 'port' not in agent_config:
                             agent_config['port'] = default_agent['remote_execution_port']
-        override = prepare_credentials_override_actions(dep_agents, credentials_override)
+        dep_credentials = copy.deepcopy(credentials_override)
+        dep_credentials['deployment'] = deployment_overrides.get(deployment.id, {})
+        override = prepare_credentials_override_actions(dep_agents, dep_credentials)
         for agent in dep_agents.itervalues():
             if agent['node'] in override:
                 agent['cloudify_agent'].update(override[agent['node']])
@@ -193,23 +196,23 @@ def _has_multi_sec_nodes(blueprint):
 
 
 def insert_blueprint_report(res, client, blueprint, deployments, config,
-                            default_agent, overrides):
+                            default_agent, overrides, dep_overrides):
     print 'Blueprint {}'.format(blueprint.id)
     res['multi_sec_nodes'] = _has_multi_sec_nodes(blueprint)
     deployments = [
         dep for dep in deployments if dep.blueprint_id == blueprint.id]
     res['deployments_count'] = len(deployments)
     res['deployments'], res[
-        'agents_count'] = get_deployment_states(client, deployments, default_agent, overrides)
+        'agents_count'] = get_deployment_states(client, deployments, default_agent, overrides, dep_overrides)
 
 
-def _get_blueprints(client, blueprints, deployments, config, default_agent, overrides):
+def _get_blueprints(client, blueprints, deployments, config, default_agent, overrides, env_overrides):
     threads = []
     res = {}
     for blueprint in blueprints:
         res[blueprint.id] = {}
         thread = threading.Thread(target=insert_blueprint_report, args=(
-            res[blueprint.id], client, blueprint, deployments, config, default_agent, overrides))
+            res[blueprint.id], client, blueprint, deployments, config, default_agent, overrides, env_overrides))
         thread.start()
         threads.append(thread)
     for thread in threads:
@@ -416,7 +419,7 @@ def get_default_agent(client):
     return client.manager.get_context()['context'][
         'cloudify']['cloudify_agent']
   
-def prepare_report(result, env, config, overrides):
+def prepare_report(result, env, config, overrides, env_overrides):
     ip = env['config']['MANAGER_IP_ADDRESS']
     result['ip'] = ip
     if env.get('inactive'):
@@ -439,7 +442,7 @@ def prepare_report(result, env, config, overrides):
         else:
             blueprints = client.blueprints.list()
         result['blueprints'], result['agents_count'] = _get_blueprints(
-            client, blueprints, deployments, config, default_agent, overrides)
+            client, blueprints, deployments, config, default_agent, overrides, env_overrides)
         result['deployments_count'] = len(deployments)
         result['blueprints_count'] = len(blueprints)
     if config.test_manager_ssh:
@@ -470,9 +473,9 @@ def prepare_report(result, env, config, overrides):
     return result
 
 
-def insert_env_report(env_result, env, config, overrides):
+def insert_env_report(env_result, env, config, overrides, env_overrides):
     try:
-        prepare_report(env_result, env, config, overrides)
+        prepare_report(env_result, env, config, overrides, env_overrides)
     except Exception as e:
         traceback.print_exc()
         env_result[
@@ -516,6 +519,7 @@ class Generate(Command):
         try:
             tenants, _ = urllib.urlretrieve(_TENANTS)
             managers = _read(tenants)
+            cf = _read(config.config)
             if config.manager:
                 managers = {
                     config.manager: managers[config.manager]
@@ -531,6 +535,10 @@ class Generate(Command):
                         manager['environments'] = envs
                         new_managers[name] = manager
                 managers = new_managers
+            if 'deployments_auth_override_path' in cf:
+                manager_specific_overrides = _read(cf['deployments_auth_override_path'])
+            else:
+                manager_specific_overrides = {}
             result = {}
             res['managers'] = result
             threads = []
@@ -539,8 +547,9 @@ class Generate(Command):
                 mgr_result = {}
                 for env_name, env in manager['environments'].iteritems():
                     env_result = {}
+                    env_overrides = manager_specific_overrides.get(mgr_name, {}).get(env_name, {})
                     thread = threading.Thread(target=insert_env_report,
-                                              args=(env_result, env, config, overrides))
+                                              args=(env_result, env, config, overrides, env_overrides))
                     thread.start()
                     threads.append(thread)
                     mgr_result[env_name] = env_result
