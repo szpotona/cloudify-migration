@@ -185,6 +185,7 @@ def install_code(handler, directory, config):
         arch_path = os.path.join(path, 'arch.tar.gz')
         call('cp -rf {0}/healthcheck {0}/remote'.format(_DIRECTORY))
         call('cp {0} {1}/remote/config.json'.format(config.config, _DIRECTORY))
+        call('bash -c "chmod +x {0}/remote/*.sh"'.format(_DIRECTORY))
         call('bash -c "cd {1}/remote ; tar -cf {0} *;"'.format(arch_path, _DIRECTORY))
         call('rm -rf {0}/remote/healthcheck'.format(_DIRECTORY))
         call('rm {0}/remote/config.json {0}/remote/auth.json'.format(_DIRECTORY))

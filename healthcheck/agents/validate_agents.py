@@ -61,12 +61,35 @@ def check_vm_access(deployment_id, deployment, test_vm_script):
     finally:
         os.remove(input_path)
         os.remove(output_path)
- 
 
-def _insert_deployment_result(dep_res, deployment_id, deployment, version, test_vm_access, test_vm_script):
+
+def _get_openstack_data(deployment_id, deployment, vms_data_script):
+    dep_res = {}
+    dep_python = '~/cloudify.{0}/env/bin/python'.format(deployment_id)
+    _, input_path = tempfile.mkstemp()
+    _, output_path = tempfile.mkstemp()
+    try:
+        with open(input_path, 'w') as f:
+            f.write(json.dumps(deployment['agents']))
+        status = call(['timeout', '20', os.path.expanduser(dep_python),
+                      vms_data_script, input_path, output_path])
+        if status:
+            dep_res['openstack_data_error'] = True
+        else:
+            with open(output_path) as f:
+                dep_res['openstack_data'] = json.loads(f.read())
+        return dep_res 
+    finally:
+        os.remove(input_path)
+        os.remove(output_path)
+
+
+def _insert_deployment_result(dep_res, deployment_id, deployment, version, test_vm_access, test_vm_script, vms_data_script):
     print 'On manager: deployment {0}'.format(deployment_id)
     result, dep_alive = check_agents_alive(deployment_id, deployment, version)
     dep_res.update(result)
+    openstack_data = _get_openstack_data(deployment_id, deployment, vms_data_script)
+    dep_res.update(openstack_data)
     if not dep_alive or not test_vm_access:
         return
     vm_access = check_vm_access(deployment_id, deployment, test_vm_script)
@@ -74,20 +97,20 @@ def _insert_deployment_result(dep_res, deployment_id, deployment, version, test_
 
 
 def _prepare_deployment_results(queue):
-    for res, dep_id, agents, version, test_vm_access, test_vm_script in  queue:
-        _insert_deployment_result(res, dep_id, agents, version, test_vm_access, test_vm_script)
+    for res, dep_id, agents, version, test_vm_access, test_vm_script, vms_data_script in  queue:
+        _insert_deployment_result(res, dep_id, agents, version, test_vm_access, test_vm_script, vms_data_script)
 
 
 def main(args):
     path = sys.argv[1]
     output = sys.argv[2]
     version = sys.argv[3]
-    test_vm_access = len(sys.argv) > 4
+    test_vm_access = sys.argv[4] != '_'
     if test_vm_access:
         test_vm_script = sys.argv[4]
     else:
         test_vm_script = None
-   
+    vms_data_script = sys.argv[5]   
     with open(path) as f:
         deployments = json.loads(f.read())
     
@@ -100,7 +123,7 @@ def main(args):
         dep_res = {}
         res[deployment_id] = dep_res
         thread_id = i % _THREAD_COUNT
-        queues[thread_id].append((dep_res, deployment_id, agents, version, test_vm_access, test_vm_script))
+        queues[thread_id].append((dep_res, deployment_id, agents, version, test_vm_access, test_vm_script, vms_data_script))
         i = i + 1
     
     for queue in queues:

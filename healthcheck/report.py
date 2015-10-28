@@ -143,6 +143,7 @@ def get_deployment_states(client, deployments, default_agent, credentials_overri
                         'cloudify_agent': node.properties.get(
                             'cloudify_agent',
                             {}),
+                        'resource_id': node_instance.runtime_properties.get('external_id', ''),
                         'is_windows': 'cloudify.openstack.nodes.WindowsServer' in node.type_hierarchy}
                     dep_agents[node_instance.id] = current_agent
                     agent_config = current_agent['cloudify_agent']
@@ -381,15 +382,23 @@ def add_vm_access_to_deployment(deployment, vm_access):
                 'error_vm_accessible'] = remote_access['error']
 
 
+def add_openstack_data(deployment, openstack_data):
+   if 'openstack_data_error' in openstack_data:
+        deployment['openstack_data_error'] = openstack_data[
+            'openstack_data_error']
+   for name, data in openstack_data.get('openstack_data', {}).iteritems():
+       deployment['agents'][name]['openstack_data'] = data 
+
+
 def _add_agents_alive_info(env_result, config, handler, files):
     if not env_result.get('manager_ssh'):
         return
     deployments = {}
     for blueprint in env_result.get('blueprints', {}).itervalues():
         for name, deployment in blueprint['deployments'].iteritems():
-            if deployment.get('ok'):
-                deployments[name] = {}
-                deployments[name]['agents'] = deployment.get('agents', {})
+            deployments[name] = {}
+            deployments[name]['ok'] = deployment.get('ok', False)
+            deployments[name]['agents'] = deployment.get('agents', {})
     _, path = tempfile.mkstemp()
     with open(path, 'w') as f:
         f.write(json.dumps(deployments))
@@ -401,10 +410,12 @@ def _add_agents_alive_info(env_result, config, handler, files):
     if config.test_agents_vm_access:
         test_vm_access = remote_access_script
     else:
-        test_vm_access = ''
-    handler.python_call('{0} {1} {2} {3} {4}'.format(
+        test_vm_access = '_'
+    remote_vms_data, _ = files.send(get_agents_resource(
+        'vms_openstack_data.py'))
+    handler.python_call('{0} {1} {2} {3} {4} {5}'.format(
         script, input_file, cont_result, env_result['version'],
-        test_vm_access))
+        test_vm_access, remote_vms_data))
     with handler.local_file(load_result) as local_result:
         result_deployments = _read(local_result)
     for blueprint in env_result.get('blueprints', {}).itervalues():
@@ -412,6 +423,7 @@ def _add_agents_alive_info(env_result, config, handler, files):
             if name in result_deployments:
                 res_deployment = result_deployments[name]
                 add_agents_alive_to_deployment(deployment, res_deployment)
+                add_openstack_data(deployment, res_deployment)
                 add_vm_access_to_deployment(deployment, res_deployment)
 
 
@@ -427,7 +439,8 @@ def prepare_report(result, env, config, overrides, env_overrides):
         return
     _, temp = tempfile.mkstemp()
     print temp
-    status = call(['timeout', '2', 'wget', ip, '-O', temp])
+#    status = call(['timeout', '2', 'wget', ip, '-O', temp])
+    status = None
     if status:
         result['msg'] = 'Cant connect to manager'
         return
@@ -586,10 +599,11 @@ class ToCsv(Command):
         parser.add_argument('--input', required=True)
         parser.add_argument('--output', required=True)
         parser.add_argument('--summary', required=True)
+        parser.add_argument('--vms', required=True)
 
     def perform(self, config):
         raport = _read(config.input)
-        with open(config.output, 'w') as f, open(config.summary, 'w') as summary:
+        with open(config.output, 'w') as f, open(config.summary, 'w') as summary, open(config.vms, 'w') as vms:
             f.write('{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12}\n'.format(
                 'manager',
                 'env',
@@ -615,7 +629,18 @@ class ToCsv(Command):
                 'expected vms',
                 'alive vms'
             ))
-
+            vms.write('{0},{1},{2},{3},{4},{5},{6},{7},{8},{9}\n'.format(
+                'manager',
+                'env',
+                'deployment',
+                'node_id',
+                'node status',
+                'is windows',
+                'openstack id',
+                'openstack name',
+                'local ip',
+                'other ips'
+            ))
             for mgr_name, manager in raport['managers'].iteritems():
                 for env_name, env in manager.iteritems():
                     checked = 'inactive' not in env and 'msg' not in env and 'error' not in env and env.get(
@@ -634,12 +659,27 @@ class ToCsv(Command):
                             valid = state =='started' and alive is True
                             deployments_count = deployments_count + 1
                             has_windows_computes = False
-                            for agent in dp.get('agents', {}).itervalues():
+                            for agent_name, agent in dp.get('agents', {}).iteritems():
                                 has_windows_computes = has_windows_computes or agent.get('is_windows', False)
                                 if agent.get('state', '') == 'started':
                                     started_agents = started_agents + 1
                                 if agent.get('alive'):
                                     alive_agents = alive_agents + 1
+                                openstack_data = agent.get('openstack_data', {})
+                                ip = agent.get('ip') or 'unknown'
+                                ips = [addr for addr in openstack_data.get('ips', []) if addr != ip]
+                                vms.write('{0},{1},{2},{3},{4},{5},{6},{7},{8},{9}\n'.format(
+                                    mgr_name,
+                                    env_name,
+                                    dp_name,
+                                    agent_name,
+                                    agent.get('state') or 'unknown',
+                                    agent.get('is_windows', False),
+                                    agent.get('resource_id') or 'unknown',
+                                    openstack_data.get('name') or 'unknown',
+                                    ip,
+                                    ';'.join(ips)
+                                ))
                             if valid:
                                 vm_access = all_vms_accessible(dp)
                             else:
