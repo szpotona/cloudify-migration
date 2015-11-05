@@ -203,8 +203,13 @@ def insert_blueprint_report(res, client, blueprint, deployments, config,
     deployments = [
         dep for dep in deployments if dep.blueprint_id == blueprint.id]
     res['deployments_count'] = len(deployments)
-    res['deployments'], res[
-        'agents_count'] = get_deployment_states(client, deployments, default_agent, overrides, dep_overrides)
+    try:
+        res['deployments'], res[
+            'agents_count'] = get_deployment_states(client, deployments, default_agent, overrides, dep_overrides)
+    except Exception as e:
+        res['error'] = traceback.format_exc()
+        # res['deployments'] = {}
+        # res['agents_count'] = 0
 
 
 def _get_blueprints(client, blueprints, deployments, config, default_agent, overrides, env_overrides):
