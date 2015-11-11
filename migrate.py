@@ -123,10 +123,16 @@ def _upload_blueprint(blueprints_path, blueprint_arch, runner,
     blueprint_path = os.path.join(blueprints_path, blueprint)
     call('mkdir {0}'.format(blueprint_path))
     try:
-        call('tar zxf {0} -C {1} --strip-components 1'.format(
-            os.path.join(blueprints_path, blueprint_arch),
-            blueprint_path
-        ))
+        try:
+            call('tar zxf {0} -C {1} --strip-components 1'.format(
+                os.path.join(blueprints_path, blueprint_arch),
+                blueprint_path
+            ))
+        except Exception as e:
+            call('tar xf {0} -C {1} --strip-components 1'.format(
+                os.path.join(blueprints_path, blueprint_arch),
+                blueprint_path
+            ))
         possible_blueprints = []
         for blueprint_file in os.listdir(blueprint_path):
             if blueprint_file.endswith('.yaml'):
