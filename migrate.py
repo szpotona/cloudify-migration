@@ -120,16 +120,16 @@ def _upload_blueprint(blueprints_path, blueprint_arch, runner,
     blueprint = blueprint_arch[:-len('.tar.gz')]
     if blueprint in old_blueprints:
         return
-    blueprint_path = os.path.join(blueprints_path, blueprint)
-    call('mkdir {0}'.format(blueprint_path))
+    blueprint_path = tempfile.mkdtemp(dir=blueprints_path)
+    call('mkdir "{0}"'.format(blueprint_path))
     try:
         try:
-            call('tar zxf {0} -C {1} --strip-components 1'.format(
+            call('tar zxf "{0}" -C "{1}" --strip-components 1'.format(
                 os.path.join(blueprints_path, blueprint_arch),
                 blueprint_path
             ))
         except Exception as e:
-            call('tar xf {0} -C {1} --strip-components 1'.format(
+            call('tar xf "{0}" -C "{1}" --strip-components 1'.format(
                 os.path.join(blueprints_path, blueprint_arch),
                 blueprint_path
             ))
@@ -157,7 +157,7 @@ def _upload_blueprint(blueprints_path, blueprint_arch, runner,
                                      'this blueprint? [y/n] ')
                     if skip == 'y':
                         return
-        runner.cfy_run('blueprints upload -p {0} -b {1}'.format(
+        runner.cfy_run('blueprints upload -p "{0}" -b "{1}"'.format(
             os.path.join(blueprint_path, to_upload), blueprint
         ))
     finally:
