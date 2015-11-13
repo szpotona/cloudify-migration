@@ -8,6 +8,7 @@ import manager_rest.es_storage_manager as es
 from manager_rest.storage_manager import instance as storage_manager_instance
 
 import agents_utils
+import execute
 
 _DIRECTORY = os.path.dirname(os.path.realpath(__file__))
 
@@ -76,16 +77,13 @@ def main(args):
             'update',
             sm
         )
-        cmd = '/bin/bash -c "cd {0} && ./modify_agents.sh {1} {2} {3} {4} {5} {6}"'.format(
-            _DIRECTORY,
+        ret = execute.main([
+            '', 
             deployment.blueprint_id,
             deployment.id,
-            manager_venv,
             operation,
             max_attempts,
-            version
-        )
-        ret = os.system(cmd)
+            version])
     finally:
         _perform_deployment_updates(
             deployment.id,

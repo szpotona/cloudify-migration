@@ -18,6 +18,7 @@ _DIRECTORY = os.path.dirname(os.path.realpath(__file__))
 _VERBOSE = True
 _HEALTHCHECK_FAILED = 'healtcheck_failed'
 
+
 def _tempfile():
     _, res = tempfile.mkstemp(dir=os.path.join(_DIRECTORY, 'tmp'))
     return res
@@ -44,25 +45,27 @@ def _mk_public(path):
 def get_override_credentials_rules(deployment_id):
     auth = _json_load(os.path.join(_DIRECTORY, 'auth.json'))
     deployment_specific = auth.get(deployment_id, {})
-    res = report.get_override_credentials_rules_from_path(os.path.join(_DIRECTORY, 'config.json'))
+    res = report.get_override_credentials_rules_from_path(
+        os.path.join(_DIRECTORY, 'config.json'))
     res['deployment'] = deployment_specific
     return res
 
 
 def get_deployment_state(deployment_id, client=None):
     if client is None:
-          client = CloudifyClient()
+        client = CloudifyClient()
     override = get_override_credentials_rules(deployment_id)
     dep_overrides = {}
     dep_overrides[deployment_id] = override['deployment']
     deployment = client.deployments.get(deployment_id)
     state, _ = report.get_deployment_states(
-        client , [deployment], report.get_default_agent(client), override, dep_overrides)
+        client, [deployment], report.get_default_agent(client), override, dep_overrides)
     return state[deployment_id]
 
- 
+
 def healthcheck(deployment_id, version, assert_vms_agents_alive=True, check_vms_access=True):
-    result = get_deployment_state(deployment_id)
+    client = CloudifyClient()
+    result = get_deployment_state(deployment_id, client)
     if not result['ok']:
         result[_HEALTHCHECK_FAILED] = 'wrong_state'
         return result
@@ -89,7 +92,7 @@ def healthcheck(deployment_id, version, assert_vms_agents_alive=True, check_vms_
 def healthcheck_command(config):
     res = healthcheck(config.deployment, config.version)
     with open(config.output, 'w') as f:
-        f.write(json.dumps(res, indent=2))      
+        f.write(json.dumps(res, indent=2))
     _mk_public(config.output)
 
 
@@ -100,7 +103,7 @@ def health_check_and_dump(config):
     data_path = _tempfile()
     events_path = _tempfile()
     state_path = _tempfile()
-    
+
     dump_storage_template = (
         'http://localhost:9200/'
         'cloudify_storage/node_instance,execution/'
@@ -109,36 +112,32 @@ def health_check_and_dump(config):
         'http://localhost:9200/'
         'cloudify_events/_search?from={start}&size={size}&'
         'q=deployment_id:{id}')
-    
+
     bulk_entry_template = ('{{ create: {{ "_id": "{id}",'
                            '"_type": "{type}"  }} }}\n{source}\n')
-    
+
     def get_chunk(cmd):
         return check_output(['curl', '-s', '-XGET', cmd], universal_newlines=True)
-    
-    
+
     def remove_newlines(s):
         return s.replace('\n', '').replace('\r', '')
-    
-    
+
     def convert_to_bulk(chunk):
         def get_source(n):
             source = n['_source']
             if n['_type'] == 'execution' and 'is_system_workflow' not in source:
                 source['is_system_workflow'] = False
             return json.dumps(source)
-    
+
         return ''.join([bulk_entry_template.format(
             id=str(n['_id']),
             type=str(n['_type']),
             source=remove_newlines(get_source(n))
-            ) for n in chunk])
-    
-    
+        ) for n in chunk])
+
     def append_to_file(f, js):
         f.write(convert_to_bulk(js['hits']['hits']))
-    
-    
+
     def dump_chunks(f, template):
         cmd = template.format(id=dep_id, start='0', size=str(CHUNK_SIZE))
         js = json.loads(get_chunk(cmd))
@@ -147,13 +146,13 @@ def health_check_and_dump(config):
         if total > CHUNK_SIZE:
             for i in xrange(CHUNK_SIZE, total, CHUNK_SIZE):
                 cmd = template.format(
-                        id=dep_id,
-                        start=str(i),
-                        size=str(CHUNK_SIZE))
+                    id=dep_id,
+                    start=str(i),
+                    size=str(CHUNK_SIZE))
                 js = json.loads(get_chunk(cmd))
                 append_to_file(f, js)
- 
-    res = tarfile.TarFile(config.output, mode='w') 
+
+    res = tarfile.TarFile(config.output, mode='w')
     state = healthcheck(config.deployment, config.version)
     _json_dump(state_path, state)
     res.add(state_path, arcname='state.json')
@@ -165,7 +164,7 @@ def health_check_and_dump(config):
     with open(data_path, 'w') as f:
         # Storage dumping
         dump_chunks(f, dump_storage_template)
-    res.add(data_path, arcname='data.json') 
+    res.add(data_path, arcname='data.json')
     with open(events_path, 'w') as f:
         # Events dumping
         dump_chunks(f, dump_events_template)
@@ -186,6 +185,17 @@ def call(command, quiet=False):
     if p.returncode:
         raise RuntimeError('Command {0} failed.'.format(command))
 
+
+def call_arr(command, quiet=False):
+    if _VERBOSE and not quiet:
+        pipes = None
+    else:
+        pipes = subprocess.PIPE
+    p = subprocess.Popen(command, stdout=pipes,
+                         stderr=pipes)
+    out, err = p.communicate()
+    if p.returncode:
+        raise RuntimeError('Command {0} failed.'.format(command))
 
 
 DEL_TEMPLATE = ("curl -s -XDELETE 'http://localhost:9200/"
@@ -231,32 +241,81 @@ def recreate_deployment(config):
 
 
 _ENVS = {
-  '3.1.0': '/opt/manager',
-  '3.2.0': '/opt/manager/env',
-  '3.2.1': '/opt/manager/env'
+    '3.1.0': '/opt/manager',
+    '3.2.0': '/opt/manager/env',
+    '3.2.1': '/opt/manager/env'
 }
 
 
+class WorkflowInjector(object):
+
+    def __init__(self, venv, work_dir, includes):
+        self.venv = venv
+        self.work_dir = work_dir
+        self.includes = includes
+
+    def inject(self):
+        shutil.copyfile(
+            os.path.join(_DIRECTORY, 'software_replacement_workflow.py'),
+            os.path.join(self.venv, 'lib', 'python2.7', 'site-packages',
+                         'software_replacement_workflow.py'))
+        shutil.copyfile(
+            os.path.join(self.work_dir, 'celeryd-includes'),
+            os.path.join(self.work_dir, 'celeryd-includes.backup'))
+        with open(os.path.join(self.work_dir, 'celeryd-includes'), 'w') as f:
+            f.write('INCLUDES={0},software_replacement_workflow'.format(
+                self.includes))
+
+    def cleanup(self):
+        os.rename(
+            os.path.join(self.work_dir, 'celeryd-includes.backup'),
+            os.path.join(self.work_dir, 'celeryd-includes'))
+        try:
+            code_path = os.path.join(
+                self.venv, 'lib', 'python2.7', 'site-packages')
+            os.remove(os.path.join(
+                code_path, 'software_replacement_workflow.py'))
+            os.remove(os.path.join(
+                code_path, 'software_replacement_workflow.pyc'))
+        except:
+            # Not really an issue
+            pass
+
+
 def _perform_agent_operation(deployment, operation, version):
+    variables = _tempfile()
+    call_arr([os.path.join(_DIRECTORY, 'dump_deployment_vars.sh'),
+              deployment, variables])
+    with open(variables) as f:
+        content = [line.rstrip('\n') for line in f]
+    virtualenv = content[0]
+    work_dir = content[1]
+    includes = content[2]
+    injector = WorkflowInjector(virtualenv, work_dir, includes)
     env = _ENVS[version]
     auth_path = _tempfile()
     state = get_deployment_state(deployment)
     override = get_override_credentials_rules(deployment)
-    actions = report.prepare_credentials_override_actions(state['agents'], override)
+    actions = report.prepare_credentials_override_actions(
+        state['agents'], override)
     _json_dump(auth_path, actions)
-    call('{0}/bin/python {1}/modify_agents.py {0} {4} 5 {2} {3} {5}'.format(
-        env, _DIRECTORY, deployment, auth_path, operation, version
-    )) 
+    with validate_agents.with_deployment_env(
+            deployment, version, force_restart=True, restart_init=injector.inject,
+            restart_cleanup=injector.cleanup):
+        call('{0}/bin/python {1}/modify_agents.py {0} {4} 5 {2} {3} {5}'.format(
+            env, _DIRECTORY, deployment, auth_path, operation, version
+        ))
 
 
 def modify_agents(config):
-    _perform_agent_operation(config.deployment, config.operation, config.version)
+    _perform_agent_operation(
+        config.deployment, config.operation, config.version)
 
 
 def uninstall_agents(config):
     _perform_agent_operation(config.deployment, 'uninstall', config.version)
     state = healthcheck(config.deployment, config.version,
-                         assert_vms_agents_alive=False, check_vms_access=False)
+                        assert_vms_agents_alive=False, check_vms_access=False)
     if _HEALTHCHECK_FAILED not in state:
         agent_alive = False
         for agent in state['agents'].itervalues():
@@ -278,7 +337,6 @@ def install_agents(config):
         i = i + 1
     _json_dump(config.output, state)
     _mk_public(config.output)
-
 
 
 def _parser():
@@ -309,15 +367,13 @@ def _parser():
     uninstall_p.add_argument('--output', required=True)
     uninstall_p.set_defaults(func=uninstall_agents)
 
-
     install_p = subparsers.add_parser('install_agents')
     install_p.add_argument('--deployment', required=True)
     install_p.add_argument('--version', required=True)
     install_p.add_argument('--output', required=True)
     install_p.set_defaults(func=install_agents)
 
-
-    healthcheck_p= subparsers.add_parser('healthcheck')
+    healthcheck_p = subparsers.add_parser('healthcheck')
     healthcheck_p.add_argument('--deployment', required=True)
     healthcheck_p.add_argument('--version', required=True)
     healthcheck_p.add_argument('--output', required=True)
