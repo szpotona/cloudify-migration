@@ -49,6 +49,18 @@ def call(command):
         raise RuntimeError('Command {0} failed.'.format(command))
 
 
+def call_arr(command, quiet=False):
+    if _VERBOSE and not quiet:
+        pipes = None
+    else:
+        pipes = subprocess.PIPE
+    p = subprocess.Popen(command, stdout=pipes,
+                         stderr=pipes)
+    out, err = p.communicate()
+    if p.returncode:
+        raise RuntimeError('Command {0} failed.'.format(command))
+
+
 def _mk_env(version):
     directory = version.replace('.', '_')
     path = os.path.join(_ENVS, directory)
@@ -86,11 +98,13 @@ class CfyRunner(object):
     def cfy_run(self, cmd):
         cwd = os.getcwd()
         os.chdir(self.directory)
+        if _VERBOSE:
+            print 'Changing workdir to {0}'.format(self.directory)
         try:
-            activate_path = os.path.join(self.env, 'bin/activate')
             cfy_path = os.path.join(self.env, 'bin/cfy')
-            call('bash -c ". {0} && {1} {2}"'.format(
-                activate_path, cfy_path, cmd))
+            command = [cfy_path]
+            command.extend(cmd)
+            call_arr(command)
         finally:
             os.chdir(cwd)
 
@@ -113,9 +127,9 @@ def _cfy_runner(ip):
 def _init_runner(ip):
     runner = _cfy_runner(ip)
     runner.mkdir()
-    runner.cfy_run('init -r')
-    runner.cfy_run('use -t {0}'.format(ip))
-    runner.cfy_run('status')
+    runner.cfy_run(['init', '-r'])
+    runner.cfy_run(['use', '-t', ip])
+    runner.cfy_run(['status'])
     return runner
 
 
@@ -124,8 +138,8 @@ def _upload_blueprint(blueprints_path, blueprint_arch, runner,
     blueprint = blueprint_arch[:-len('.tar.gz')]
     if blueprint in old_blueprints:
         return
-    blueprint_path = tempfile.mkdtemp(dir=blueprints_path)
-    call('mkdir "{0}"'.format(blueprint_path))
+    blueprint_path = os.path.join(blueprints_path, blueprint)
+    call_arr(['mkdir', blueprint_path])
     try:
         try:
             call('tar zxf "{0}" -C "{1}" --strip-components 1'.format(
@@ -161,9 +175,7 @@ def _upload_blueprint(blueprints_path, blueprint_arch, runner,
                                      'this blueprint? [y/n] ')
                     if skip == 'y':
                         return
-        runner.cfy_run('blueprints upload -p "{0}" -b "{1}"'.format(
-            os.path.join(blueprint_path, to_upload), blueprint
-        ))
+        runner.cfy_run(['blueprints', 'upload',  '-p',  os.path.join(blueprint_path, to_upload), '-b', blueprint])
     finally:
         shutil.rmtree(blueprint_path)
 
@@ -334,11 +346,7 @@ def _migrate_deployment(deployment, existing_deployments,
         with open(inputs, 'w') as f:
             f.write(yaml.dump(deployment['inputs']))
         print 'Creating deployment...'
-        target_runner.cfy_run('deployments create -d {0} -b {1} -i {2}'.format(
-            deployment.id,
-            deployment.blueprint_id,
-            inputs
-        ))
+        target_runner.cfy_run(['deployments', 'create', '-d', deployment.id, '-b', deployment.blueprint_id, '-i', inputs])
         phase = 'creating_deployment'
         create_dep_execution = target_runner.rest.executions.list(
             deployment_id=deployment.id
