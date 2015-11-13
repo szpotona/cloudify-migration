@@ -48,7 +48,7 @@ def set_globals(config):
 def get_override_credentials_rules_from_path(path):
     conf = _read(path)
     rules = dict((k, v) for k, v in conf.iteritems() if
-        k in ['windows_username', 'windows_password', 'unix_username', 'unix_keypath'] and v)
+                 k in ['windows_username', 'windows_password', 'unix_username', 'unix_keypath'] and v)
     return rules
 
 
@@ -117,7 +117,7 @@ def prepare_credentials_override_actions(agents, credentials_override):
             if k in node_default:
                 node_rules[v] = node_default[k]
         if node_rules:
-              rules[node_name] = node_rules
+            rules[node_name] = node_rules
     return rules
 
 
@@ -150,14 +150,18 @@ def get_deployment_states(client, deployments, default_agent, credentials_overri
                     agent_config['host'] = current_agent['ip']
                     if not current_agent['is_windows']:
                         if 'key' not in agent_config:
-                            agent_config['key'] = default_agent['agent_key_path']
+                            agent_config['key'] = default_agent[
+                                'agent_key_path']
                         if 'user' not in agent_config:
                             agent_config['user'] = default_agent['user']
                         if 'port' not in agent_config:
-                            agent_config['port'] = default_agent['remote_execution_port']
+                            agent_config['port'] = default_agent[
+                                'remote_execution_port']
         dep_credentials = copy.deepcopy(credentials_override)
-        dep_credentials['deployment'] = deployment_overrides.get(deployment.id, {})
-        override = prepare_credentials_override_actions(dep_agents, dep_credentials)
+        dep_credentials['deployment'] = deployment_overrides.get(
+            deployment.id, {})
+        override = prepare_credentials_override_actions(
+            dep_agents, dep_credentials)
         for agent in dep_agents.itervalues():
             if agent['node'] in override:
                 agent['cloudify_agent'].update(override[agent['node']])
@@ -372,12 +376,12 @@ def add_agents_alive_to_deployment(deployment, agents_alive):
         deployment['agents'][agent_name]['alive'] = alive
         dep_alive = dep_alive and alive
     deployment['alive'] = dep_alive
- 
- 
+
+
 def add_vm_access_to_deployment(deployment, vm_access):
     if 'agents_remote_access_error' in vm_access:
         deployment['agents_remote_access_error'] = vm_access[
-            'agents_remote_access_error'] 
+            'agents_remote_access_error']
     for agent_name, remote_access in vm_access.get(
             'agents_remote_access', {}).iteritems():
         deployment['agents'][agent_name][
@@ -388,11 +392,11 @@ def add_vm_access_to_deployment(deployment, vm_access):
 
 
 def add_openstack_data(deployment, openstack_data):
-   if 'openstack_data_error' in openstack_data:
+    if 'openstack_data_error' in openstack_data:
         deployment['openstack_data_error'] = openstack_data[
             'openstack_data_error']
-   for name, data in openstack_data.get('openstack_data', {}).iteritems():
-       deployment['agents'][name]['openstack_data'] = data 
+    for name, data in openstack_data.get('openstack_data', {}).iteritems():
+        deployment['agents'][name]['openstack_data'] = data
 
 
 def _add_agents_alive_info(env_result, config, handler, files):
@@ -435,7 +439,8 @@ def _add_agents_alive_info(env_result, config, handler, files):
 def get_default_agent(client):
     return client.manager.get_context()['context'][
         'cloudify']['cloudify_agent']
-  
+
+
 def prepare_report(result, env, config, overrides, env_overrides):
     ip = env['config']['MANAGER_IP_ADDRESS']
     result['ip'] = ip
@@ -554,7 +559,8 @@ class Generate(Command):
                         new_managers[name] = manager
                 managers = new_managers
             if cf.get('deployments_auth_override_path'):
-                manager_specific_overrides = _read(cf['deployments_auth_override_path'])
+                manager_specific_overrides = _read(
+                    cf['deployments_auth_override_path'])
             else:
                 manager_specific_overrides = {}
             result = {}
@@ -565,7 +571,8 @@ class Generate(Command):
                 mgr_result = {}
                 for env_name, env in manager['environments'].iteritems():
                     env_result = {}
-                    env_overrides = manager_specific_overrides.get(mgr_name, {}).get(env_name, {})
+                    env_overrides = manager_specific_overrides.get(
+                        mgr_name, {}).get(env_name, {})
                     thread = threading.Thread(target=insert_env_report,
                                               args=(env_result, env, config, overrides, env_overrides))
                     thread.start()
@@ -591,7 +598,7 @@ def all_vms_accessible(deployment):
     vm_access = True
     for agent in deployment.get('agents', []).itervalues():
         vm_access = vm_access and agent.get('vm_accessible', False)
-    return vm_access 
+    return vm_access
 
 
 class ToCsv(Command):
@@ -661,18 +668,21 @@ class ToCsv(Command):
                         for dp_name, dp in bpt['deployments'].iteritems():
                             state = dp['status']
                             alive = dp.get('alive', 'skipped')
-                            valid = state =='started' and alive is True
+                            valid = state == 'started' and alive is True
                             deployments_count = deployments_count + 1
                             has_windows_computes = False
                             for agent_name, agent in dp.get('agents', {}).iteritems():
-                                has_windows_computes = has_windows_computes or agent.get('is_windows', False)
+                                has_windows_computes = has_windows_computes or agent.get(
+                                    'is_windows', False)
                                 if agent.get('state', '') == 'started':
                                     started_agents = started_agents + 1
                                 if agent.get('alive'):
                                     alive_agents = alive_agents + 1
-                                openstack_data = agent.get('openstack_data', {})
+                                openstack_data = agent.get(
+                                    'openstack_data', {})
                                 ip = agent.get('ip') or 'unknown'
-                                ips = [addr for addr in openstack_data.get('ips', []) if addr != ip]
+                                ips = [addr for addr in openstack_data.get(
+                                    'ips', []) if addr != ip]
                                 vms.write('{0},{1},{2},{3},{4},{5},{6},{7},{8},{9}\n'.format(
                                     mgr_name,
                                     env_name,

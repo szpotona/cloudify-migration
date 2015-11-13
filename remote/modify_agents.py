@@ -12,6 +12,7 @@ import execute
 
 _DIRECTORY = os.path.dirname(os.path.realpath(__file__))
 
+
 def _prepare_auth_updates(deployment_id, auth_dict, sm):
     # will throw an exception if there is no such deployment
     sm.get_deployment(deployment_id)
@@ -78,7 +79,7 @@ def main(args):
             sm
         )
         ret = execute.main([
-            '', 
+            '',
             deployment.blueprint_id,
             deployment.id,
             operation,

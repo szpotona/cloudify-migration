@@ -78,11 +78,11 @@ def _wait_for_execution_finish(execution_id, attempt_limit, sm):
     canceled = False
     for event in _events_generator(execution_id, sm):
         if (not canceled and
-           event.get('event_type') == 'task_failed'):
+                event.get('event_type') == 'task_failed'):
             attempt = utils.event_task_attempts(event)
             if (attempt is not None and
-               attempt_limit >= 0 and
-               attempt >= attempt_limit):
+                    attempt_limit >= 0 and
+                    attempt >= attempt_limit):
                 # We need to cancel executions:
                 msg_format = 'Retry limit exceeded, current: {0}, limit: {1}'
                 msg = msg_format.format(attempt, attempt_limit)
