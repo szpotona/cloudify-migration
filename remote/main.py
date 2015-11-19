@@ -376,6 +376,8 @@ def perform_start_agents(config):
         threads.append(thread)
     for t in threads:
         t.join()
+    for k, v in results.iteritems():
+        print '{0}: {1}, {2}'.format(k, v['ok'], v.get('error', ''))
 
 
 def _parser():
