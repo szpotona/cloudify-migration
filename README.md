@@ -24,3 +24,4 @@ agents - it can be used for agent installation/uninstallation for specific deplo
 
 healthcheck - runs healthcheck for specific deployment
 
+start_agents - starts agents on host vms in all valid deployments on manager. It skips those deployments where agents are responding and those where there is a vm that can't be accessed remotely.
