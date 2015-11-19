@@ -6,7 +6,9 @@ from subprocess import check_output
 import subprocess
 import tarfile
 import tempfile
+import threading
 import time
+import traceback
 import shutil
 import shlex
 from cloudify_rest_client.client import CloudifyClient
@@ -339,6 +341,43 @@ def install_agents(config):
     _mk_public(config.output)
 
 
+def _start_deployment_agents(config, results, deployment):
+    print 'Starting agents for deployment {0}'.format(deployment.id)
+    dep = {}
+    results[deployment.id] = dep
+    try:
+        state = healthcheck(deployment.id, config.version,
+                            assert_vms_agents_alive=False)
+        dep['pre_check'] = state
+        if _HEALTHCHECK_FAILED in state:
+            dep['ok'] = False
+            dep['error'] = state[_HEALTHCHECK_FAILED]
+            return
+        dep_python = '~/cloudify.{0}/env/bin/python'.format(deployment.id)
+        dep_path = _tempfile()
+        _json_dump(dep_path, state)
+        call_arr(['timeout', '200', os.path.expanduser(dep_python),
+                  os.path.join(_DIRECTORY, 'start_agents.py'), dep_path])
+        dep['ok'] = True
+    except Exception as e:
+        traceback.print_exc()
+        dep['ok'] = False
+        dep['error'] = str(e)
+
+
+def perform_start_agents(config):
+    client = CloudifyClient()
+    results = {}
+    threads = []
+    for dep in client.deployments.list():
+        thread = threading.Thread(
+            target=_start_deployment_agents, args=(config, results, dep))
+        thread.start()
+        threads.append(thread)
+    for t in threads:
+        t.join()
+
+
 def _parser():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers()
@@ -379,6 +418,9 @@ def _parser():
     healthcheck_p.add_argument('--output', required=True)
     healthcheck_p.set_defaults(func=healthcheck_command)
 
+    start_agents = subparsers.add_parser('start_agents')
+    start_agents.add_argument('--version', required=True)
+    start_agents.set_defaults(func=perform_start_agents)
     return parser
 
 

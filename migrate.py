@@ -499,6 +499,16 @@ def perform_healthcheck(config):
     os.remove(res_path)
 
 
+def start_agents(config):
+    runner = _init_runner(config.manager_ip)
+    report.set_credentials(config)
+    install_code(runner.handler, _REMOTE_PATH, config)
+    runner.handler.python_call('{0} start_agents --version {1}'.format(
+        runner.handler.container_path(_REMOTE_PATH, 'main.py'),
+        runner.version
+    ))
+
+
 def _parser():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers()
@@ -522,6 +532,11 @@ def _parser():
     agent.add_argument('--operation', required=True)
     agent.add_argument('--config', required=True)
     agent.set_defaults(func=modify_agents)
+
+    agent = subparsers.add_parser('start_agents')
+    agent.add_argument('--manager_ip', required=True)
+    agent.add_argument('--config', required=True)
+    agent.set_defaults(func=start_agents)
 
     cleanup = subparsers.add_parser('cleanup')
     cleanup.add_argument('--manager_ip', required=True)
