@@ -303,7 +303,7 @@ def _perform_agent_operation(deployment, operation, version):
     _json_dump(auth_path, actions)
     with validate_agents.with_deployment_env(
             deployment, version, force_restart=True, restart_init=injector.inject,
-            restart_cleanup=injector.cleanup):
+            restart_cleanup=injector.cleanup, raise_on_wait_failure=True):
         call('{0}/bin/python {1}/modify_agents.py {0} {4} 5 {2} {3} {5}'.format(
             env, _DIRECTORY, deployment, auth_path, operation, version
         ))

@@ -71,7 +71,8 @@ def is_transient_workers_mode(client=None):
 
 @contextmanager
 def with_deployment_env(deployment_id, version, force_restart,
-                        restart_init=None, restart_cleanup=None):
+                        restart_init=None, restart_cleanup=None,
+                        raise_on_wait_failure=True):
     is_transient_worker = is_transient_workers_mode()
     workflows_worker = '{0}_workflows'.format(deployment_id)
     if force_restart:
@@ -92,8 +93,12 @@ def with_deployment_env(deployment_id, version, force_restart,
             restart_init()
         celery_service_operation(workflows_worker, start_operation)
         try:
-            celery_wait_for_started(deployment_id, version)
-            celery_wait_for_started(workflows_worker, version)
+            try:
+                celery_wait_for_started(deployment_id, version)
+                celery_wait_for_started(workflows_worker, version)
+            except Exception as e:
+                if raise_on_wait_failure:
+                    raise e
             yield
         finally:
             if restart_cleanup is not None:
@@ -104,7 +109,8 @@ def with_deployment_env(deployment_id, version, force_restart,
 
 
 def check_agents_alive(deployment_id, deployment, version):
-    with with_deployment_env(deployment_id, version, force_restart=False):
+    with with_deployment_env(deployment_id, version, force_restart=False,
+                             raise_on_wait_failure=False):
         dep_res = {}
         dep_res['workflows_worker_alive'] = _check_alive(
             '{0}_workflows'.format(deployment_id), version)
