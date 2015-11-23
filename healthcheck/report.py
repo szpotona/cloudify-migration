@@ -19,7 +19,7 @@ _TENANTS = ''
 _USER = ''
 _MANAGER_KEY = ''
 _VERBOSE = True
-
+_SSH_INTERVAL = 4
 
 def _read(filename):
     with open(filename) as f:
@@ -255,7 +255,7 @@ class ManagerHandler(object):
         self.manager_ip = ip
 
     def scp(self, local_path, path_on_manager, to_manager):
-        time.sleep(4)
+        time.sleep(_SSH_INTERVAL)
         scp_path = spawn.find_executable('scp')
         management_path = '{0}@{1}:{2}'.format(
             _USER,
@@ -281,7 +281,7 @@ class ManagerHandler(object):
         self.scp(target, source, False)
 
     def execute(self, cmd, timeout=900):
-        time.sleep(4)
+        time.sleep(_SSH_INTERVAL)
         ssh_cmd = ['ssh',  '-o', 'ServerAliveInterval=30', '-o', 'StrictHostKeyChecking=no', '-i',
                    os.path.expanduser(_MANAGER_KEY), '{0}@{1}'.format(
                        _USER, self.manager_ip), '-C', cmd]
