@@ -25,3 +25,20 @@ agents - it can be used for agent installation/uninstallation for specific deplo
 healthcheck - runs healthcheck for specific deployment
 
 start_agents - starts agents on host vms in all valid deployments on manager. It skips those deployments where agents are responding and those where there is a vm that can't be accessed remotely.
+
+# Testing environment
+All testing is performed in openstack cloud.
+
+Machine where script is run: Ubuntu 14.04
+
+Cloudify machines:
+
+Manager 3.1: Ubuntu 12.04
+
+Manager 3.2: Ubuntu 14.04
+
+Manager 3.2.1: Ubuntu 14.04
+
+Unix deployments: Ubuntu 14.04
+
+Windows deployments: Windows Server 2008, Service Pack 2 (custom image with preconfigured WinRM and predefined username/password)
