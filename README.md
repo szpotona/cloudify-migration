@@ -26,6 +26,10 @@ healthcheck - runs healthcheck for specific deployment
 
 start_agents - starts agents on host vms in all valid deployments on manager. It skips those deployments where agents are responding and those where there is a vm that can't be accessed remotely.
 
+analyze_blueprints - subcommand that downloads all blueprints from manager and checks if it is possible to autmatically pick correct yaml file. Generates two outputs files:
+full report - json file, path should be specified with --output flag
+list of problematic blueprints - csv file, path should specified with --csv_output file. First column in csv file is a name of the blueprint, all following columns are filled with names of blueprint file candidates. Only those blueprints that have multiple blueprint file candidates are listed here.
+
 # Testing environment
 All testing is performed in openstack cloud.
 

@@ -28,6 +28,11 @@ def _json_load(path):
         return json.loads(f.read())
 
 
+def _json_dump(path, content):
+    with open(path, 'w') as f:
+        f.write(json.dumps(content, indent=2))
+
+
 def _json_load_remote(runner, load_path, tmp_path):
     _, result_local = tempfile.mkstemp(dir=tmp_path)
     runner.handler.load_file(load_path, result_local)
@@ -146,7 +151,7 @@ def _upload_blueprint(blueprints_path, blueprint_arch, runner,
                 os.path.join(blueprints_path, blueprint_arch),
                 blueprint_path
             ))
-        except Exception as e:
+        except Exception:
             call('tar xf "{0}" -C "{1}" --strip-components 1'.format(
                 os.path.join(blueprints_path, blueprint_arch),
                 blueprint_path
@@ -178,20 +183,6 @@ def _upload_blueprint(blueprints_path, blueprint_arch, runner,
         runner.cfy_run(['blueprints', 'upload',  '-p',  os.path.join(blueprint_path, to_upload), '-b', blueprint])
     finally:
         shutil.rmtree(blueprint_path)
-
-
-def migrate_blueprints(source_runner, target_runner):
-    blueprints_path = tempfile.mkdtemp(prefix='blueprints_dir')
-    try:
-        source_runner.python_run('{0} {1}'.format(
-            os.path.join(_DIRECTORY, 'utils', 'download_blueprints.py'),
-            blueprints_path))
-        blueprints = [b.id for b in target_runner.rest.blueprints.list()]
-        for blueprint in os.listdir(blueprints_path):
-            _upload_blueprint(blueprints_path, blueprint, target_runner,
-                              blueprints)
-    finally:
-        shutil.rmtree(blueprints_path)
 
 
 def install_code(handler, directory, config):
@@ -509,6 +500,87 @@ def start_agents(config):
     ))
 
 
+def migrate_blueprints(source_runner, target_runner):
+    blueprints_path = tempfile.mkdtemp(prefix='blueprints_dir')
+    try:
+        source_runner.python_run('{0} {1}'.format(
+            os.path.join(_DIRECTORY, 'utils', 'download_blueprints.py'),
+            blueprints_path))
+        blueprints = [b.id for b in target_runner.rest.blueprints.list()]
+        for blueprint in os.listdir(blueprints_path):
+            _upload_blueprint(blueprints_path, blueprint, target_runner,
+                              blueprints)
+    finally:
+        shutil.rmtree(blueprints_path)
+
+
+def _insert_blueprint_result(blueprint_arch, blueprints_path, results):
+    blueprint = blueprint_arch[:-len('.tar.gz')]
+    blueprint_path = os.path.join(blueprints_path, blueprint)
+    call_arr(['mkdir', blueprint_path])
+    try:
+        try:
+            call('tar zxf "{0}" -C "{1}" --strip-components 1'.format(
+                os.path.join(blueprints_path, blueprint_arch),
+                blueprint_path
+            ))
+        except Exception:
+            call('tar xf "{0}" -C "{1}" --strip-components 1'.format(
+                os.path.join(blueprints_path, blueprint_arch),
+                blueprint_path
+            ))
+        possible_blueprints = []
+        for blueprint_file in os.listdir(blueprint_path):
+            if blueprint_file.endswith('.yaml'):
+                possible_blueprints.append(blueprint_file)
+        results[blueprint] = {
+            'possible_files': possible_blueprints
+        }
+    finally:
+        shutil.rmtree(blueprint_path)
+
+
+def analyze_blueprints(config):
+    runner = _init_runner(config.manager_ip)
+    report.set_credentials(config)
+    blueprints_path = tempfile.mkdtemp(prefix='blueprints_dir')
+    try:
+        runner.python_run('{0} {1}'.format(
+            os.path.join(_DIRECTORY, 'utils', 'download_blueprints.py'),
+            blueprints_path))
+        blueprints_results = {}
+        for blueprint in os.listdir(blueprints_path):
+            _insert_blueprint_result(blueprint, blueprints_path,
+                                     blueprints_results)
+        multi_yaml = 0
+        single_yaml = 0
+        for k, vals in blueprints_results.iteritems():
+            if len(vals['possible_files']) > 1:
+                multi_yaml += 1
+            elif len(vals['possible_files']) == 1:
+                single_yaml += 1
+            else:
+                raise RuntimeError(
+                    'Blueprint {0} does not contain yaml file'.format(k))
+        res = {
+            'single_yaml': single_yaml,
+            'multi_yaml': multi_yaml,
+            'blueprints': blueprints_results
+        }
+        _json_dump(config.output, res)
+        with open(config.csv_output, 'w') as f:
+            f.write('blueprint,files\n')
+            for k, vals in blueprints_results.iteritems():
+                if len(vals['possible_files']) > 1:
+                    files = [k] + vals['possible_files']
+                    f.write('{0}\n'.format(','.join(files)))
+        print 'Summary:'
+        print 'Blueprints with multiple yaml files: {0}'.format(multi_yaml)
+        print 'Blueprints with single yaml file: {0}'.format(single_yaml)
+    finally:
+        shutil.rmtree(blueprints_path)
+
+
 def _parser():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers()
@@ -548,6 +620,13 @@ def _parser():
     healthcheck_p.add_argument('--manager_ip', required=True)
     healthcheck_p.add_argument('--config', required=True)
     healthcheck_p.set_defaults(func=perform_healthcheck)
+
+    analyzer = subparsers.add_parser('analyze_blueprints')
+    analyzer.add_argument('--manager_ip', required=True)
+    analyzer.add_argument('--config', required=True)
+    analyzer.add_argument('--output', required=True)
+    analyzer.add_argument('--csv_output', required=True)
+    analyzer.set_defaults(func=analyze_blueprints)
     return parser
 
 
