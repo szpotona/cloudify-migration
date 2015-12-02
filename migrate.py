@@ -113,6 +113,8 @@ class CfyRunner(object):
         finally:
             os.chdir(cwd)
 
+    # Deprecated, try to use python_run_arr instead
+    # It handles whitespaces in more reasonable way.
     def python_run(self, cmd):
         cwd = os.getcwd()
         os.chdir(self.directory)
@@ -121,6 +123,18 @@ class CfyRunner(object):
             call('{0} {1}'.format(python_path, cmd))
         finally:
             os.chdir(cwd)
+
+    def python_run_arr(self, cmd):
+        cwd = os.getcwd()
+        os.chdir(self.directory)
+        try:
+            python_path = os.path.join(self.env, 'bin/python')
+            command = [python_path]
+            command.extend(cmd)
+            call_arr(command)
+        finally:
+            os.chdir(cwd)
+
 
 
 def _cfy_runner(ip):
@@ -139,7 +153,7 @@ def _init_runner(ip):
 
 
 def _upload_blueprint(blueprints_path, blueprint_arch, runner,
-                      old_blueprints):
+                      old_blueprints, config, source_runner):
     blueprint = blueprint_arch[:-len('.tar.gz')]
     if blueprint in old_blueprints:
         return
@@ -160,6 +174,13 @@ def _upload_blueprint(blueprints_path, blueprint_arch, runner,
         for blueprint_file in os.listdir(blueprint_path):
             if blueprint_file.endswith('.yaml'):
                 possible_blueprints.append(blueprint_file)
+        if config.autofilter_blueprints:
+            possible_blueprints = _filter_possible_blueprint_files(
+                blueprint,
+                possible_blueprints,
+                blueprint_path,
+                source_runner
+            )
         if len(possible_blueprints) == 0:
             raise RuntimeError('No yaml file in blueprint {0}'.format(
                 blueprint))
@@ -437,10 +458,12 @@ def migrate(config):
     source_runner = _init_runner(config.source)
     target_runner = _init_runner(config.target)
     if not config.skip_blueprints:
-        migrate_blueprints(source_runner, target_runner)
+        migrate_blueprints(source_runner, target_runner, config)
     report.set_credentials(config)
-    migrate_deployments(source_runner, target_runner, config)
-    pass
+    if not config.skip_deployments:
+        migrate_deployments(source_runner, target_runner, config)
+    else:
+        print 'Skipping deployment migration'
 
 
 def _modify_agents(runner, operation, deployment):
@@ -500,7 +523,7 @@ def start_agents(config):
     ))
 
 
-def migrate_blueprints(source_runner, target_runner):
+def migrate_blueprints(source_runner, target_runner, config):
     blueprints_path = tempfile.mkdtemp(prefix='blueprints_dir')
     try:
         source_runner.python_run('{0} {1}'.format(
@@ -509,12 +532,36 @@ def migrate_blueprints(source_runner, target_runner):
         blueprints = [b.id for b in target_runner.rest.blueprints.list()]
         for blueprint in os.listdir(blueprints_path):
             _upload_blueprint(blueprints_path, blueprint, target_runner,
-                              blueprints)
+                              blueprints, config, source_runner)
     finally:
         shutil.rmtree(blueprints_path)
 
 
-def _insert_blueprint_result(blueprint_arch, blueprints_path, results):
+def _filter_possible_blueprint_files(blueprint_name, possible_blueprints,
+                                     blueprint_path, runner):
+    print 'Filtering blueprint files for blueprint {0}'.format(blueprint_name)
+    original_blueprint = runner.rest.blueprints.get(blueprint_name)
+    expected_nodes = {n['name'] for n in original_blueprint['plan']['nodes']}
+    result = []
+    for blueprint in possible_blueprints:
+        print 'Checking candidate {0}'.format(blueprint)
+        _, path = tempfile.mkstemp()
+        try:
+            runner.python_run_arr([
+                os.path.join(_DIRECTORY, 'utils', 'list_node_names.py'),
+                os.path.join(blueprint_path, blueprint),
+                path
+            ])
+            nodes = _json_load(path)
+            if nodes['ok'] and set(nodes['nodes']) == expected_nodes:
+                result.append(blueprint)
+        finally:
+            os.remove(path)
+    return result
+
+
+def _insert_blueprint_result(blueprint_arch, blueprints_path, results,
+                             runner, config):
     blueprint = blueprint_arch[:-len('.tar.gz')]
     blueprint_path = os.path.join(blueprints_path, blueprint)
     call_arr(['mkdir', blueprint_path])
@@ -533,6 +580,13 @@ def _insert_blueprint_result(blueprint_arch, blueprints_path, results):
         for blueprint_file in os.listdir(blueprint_path):
             if blueprint_file.endswith('.yaml'):
                 possible_blueprints.append(blueprint_file)
+        if config.autofilter_blueprints:
+            possible_blueprints = _filter_possible_blueprint_files(
+                blueprint,
+                possible_blueprints,
+                blueprint_path,
+                runner
+            )
         results[blueprint] = {
             'possible_files': possible_blueprints
         }
@@ -551,7 +605,7 @@ def analyze_blueprints(config):
         blueprints_results = {}
         for blueprint in os.listdir(blueprints_path):
             _insert_blueprint_result(blueprint, blueprints_path,
-                                     blueprints_results)
+                                     blueprints_results, runner, config)
         multi_yaml = 0
         single_yaml = 0
         for k, vals in blueprints_results.iteritems():
@@ -595,7 +649,10 @@ def _parser():
     migrate_p.add_argument('--deployment')
     migrate_p.add_argument('--skip-blueprints',
                            default=False, action='store_true')
-
+    migrate_p.add_argument('--skip-deployments',
+                           default=False, action='store_true')
+    migrate_p.add_argument('--autofilter-blueprints',
+                           default=False, action='store_true')
     migrate_p.set_defaults(func=migrate)
 
     agent = subparsers.add_parser('agents')
@@ -626,6 +683,8 @@ def _parser():
     analyzer.add_argument('--config', required=True)
     analyzer.add_argument('--output', required=True)
     analyzer.add_argument('--csv_output', required=True)
+    analyzer.add_argument('--autofilter-blueprints',
+                           default=False, action='store_true')
     analyzer.set_defaults(func=analyze_blueprints)
     return parser
 

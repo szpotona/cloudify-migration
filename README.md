@@ -30,6 +30,11 @@ analyze_blueprints - subcommand that downloads all blueprints from manager and c
 full report - json file, path should be specified with --output flag
 list of problematic blueprints - csv file, path should specified with --csv_output file. First column in csv file is a name of the blueprint, all following columns are filled with names of blueprint file candidates. Only those blueprints that have multiple blueprint file candidates are listed here.
 
+# Tips:
+Both migrate and analyze_blueprints supports --autofilter-blueprints flag.
+When uploading blueprints, script sometimes asks to pick a correct blueprint file. If you use this flag, a number of such queries will be reduced.
+
+
 # Testing environment
 All testing is performed in openstack cloud.
 
