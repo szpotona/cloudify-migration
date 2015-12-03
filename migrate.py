@@ -256,7 +256,7 @@ def _log_msg(deployment_id, msg, logpath):
 
 
 def _perform_migration(deployment, existing_deployments,
-                       source_runner, target_runner, logpath):
+                       source_runner, target_runner, logpath, config):
     done = False
     retry = False
     result = {}
@@ -265,7 +265,7 @@ def _perform_migration(deployment, existing_deployments,
         internal_error = False
         try:
             _migrate_deployment(deployment, existing_deployments,
-                                source_runner, target_runner, result)
+                                source_runner, target_runner, result, config)
         except Exception as e:
             traceback.print_exc()
             internal_error = True
@@ -312,7 +312,7 @@ def _perform_migration(deployment, existing_deployments,
 
 
 def _migrate_deployment(deployment, existing_deployments,
-                        source_runner, target_runner, result):
+                        source_runner, target_runner, result, config):
     phase = 'starting'
     error = ''
     deployment_path = tempfile.mkdtemp(
@@ -333,11 +333,14 @@ def _migrate_deployment(deployment, existing_deployments,
         target_output_load_path = '~/{0}/{1}'.format(_REMOTE_TMP, filename)
 
         print 'Healthcheck and data dump...'
-        source_runner.handler.python_call('{0} healthcheck_and_dump --deployment {1} --output {2} --version {3}'.format(
-            source_runner.handler.container_path(_REMOTE_PATH, 'main.py'),
-            deployment.id,
-            source_output_parameter_path,
-            source_runner.version
+        source_runner.handler.python_call(
+            ('{0} healthcheck_and_dump --deployment {1} --output {2} '
+             '--version {3} {4}').format(
+                source_runner.handler.container_path(_REMOTE_PATH, 'main.py'),
+                deployment.id,
+                source_output_parameter_path,
+                source_runner.version,
+                '--skip-env-healthchecks' if config.skip_agents else ''
         ))
         res_path = os.path.join(deployment_path, 'arch.tar.gz')
         print 'Downloading data dump...'
@@ -376,13 +379,18 @@ def _migrate_deployment(deployment, existing_deployments,
             _REMOTE_TMP, recreate_result)
         print 'Restoring deployment runtime data...'
         target_runner.handler.python_call(('{0} recreate_deployment --deployment {1} --input {2}'
-                                           ' --version {3} --output {4}').format(
+                                           ' --version {3} --output {4} {5}').format(
             target_runner.handler.container_path(_REMOTE_PATH, 'main.py'),
             deployment.id,
             script_arch,
             target_runner.version,
-            target_output_parameter_path
+            target_output_parameter_path,
+            '--skip-healthchecks' if config.skip_agents else ''
         ))
+        # No need to perform healthchecks on restored deployment
+        if config.skip_agents:
+            phase = 'deployment_migrated'
+            return
         print 'Loading result of recreate deployment...'
         recreate_result = _json_load_remote(
             target_runner, target_output_load_path, deployment_path)
@@ -451,7 +459,8 @@ def migrate_deployments(source_runner, target_runner, config):
         deployments = source_runner.rest.deployments.list()
     for deployment in deployments:
         _perform_migration(deployment, existing_deployments,
-                           source_runner, target_runner, config.logfile)
+                           source_runner, target_runner, config.logfile,
+                           config)
 
 
 def migrate(config):
@@ -650,6 +659,8 @@ def _parser():
     migrate_p.add_argument('--skip-blueprints',
                            default=False, action='store_true')
     migrate_p.add_argument('--skip-deployments',
+                           default=False, action='store_true')
+    migrate_p.add_argument('--skip-agents',
                            default=False, action='store_true')
     migrate_p.add_argument('--autofilter-blueprints',
                            default=False, action='store_true')

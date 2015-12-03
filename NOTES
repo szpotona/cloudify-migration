@@ -1,5 +1,7 @@
+1.0.3 - 03.12.2015
+Added --skip-agents flag to migrate subcommand.
 1.0.2 - 02.12.2015
-Added --autofilter-blueprints flag to both migrate and analyze_blueprints subcommands
+Added --autofilter-blueprints flag to both migrate and analyze_blueprints subcommands.
 Added --skip-deployments flag to migrate subcommand.
 1.0.1 - 01.12.2015
 Added analyze_blueprints subcommand to migrate.py

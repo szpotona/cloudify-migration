@@ -65,11 +65,14 @@ def get_deployment_state(deployment_id, client=None):
     return state[deployment_id]
 
 
-def healthcheck(deployment_id, version, assert_vms_agents_alive=True, check_vms_access=True):
+def healthcheck(deployment_id, version, assert_vms_agents_alive=True,
+                check_vms_access=True, skip_env_healthchecks=False):
     client = CloudifyClient()
     result = get_deployment_state(deployment_id, client)
     if not result['ok']:
         result[_HEALTHCHECK_FAILED] = 'wrong_state'
+        return result
+    if skip_env_healthchecks:
         return result
     agents_alive, dep_alive = validate_agents.check_agents_alive(
         deployment_id, result, version)
@@ -155,7 +158,8 @@ def health_check_and_dump(config):
                 append_to_file(f, js)
 
     res = tarfile.TarFile(config.output, mode='w')
-    state = healthcheck(config.deployment, config.version)
+    state = healthcheck(config.deployment, config.version,
+                        skip_env_healthchecks=config.skip_env_healthchecks)
     _json_dump(state_path, state)
     res.add(state_path, arcname='state.json')
     if _HEALTHCHECK_FAILED in state:
@@ -231,6 +235,8 @@ def recreate_deployment(config):
         file=os.path.join(dep_dir, 'events.json'),
         index='cloudify_events'
     ), quiet=True)
+    if config.skip_healthchecks:
+        return
     state = healthcheck(config.deployment, config.version,
                         assert_vms_agents_alive=False)
     if _HEALTHCHECK_FAILED not in state:
@@ -387,6 +393,10 @@ def _parser():
     health.add_argument('--deployment', required=True)
     health.add_argument('--output', required=True)
     health.add_argument('--version', required=True)
+    # Skips both vm and agent healthchecks.
+    # It means only state healthcheck will be performed.
+    health.add_argument('--skip-env-healthchecks',
+                        default=False, action='store_true')
     health.set_defaults(func=health_check_and_dump)
 
     create = subparsers.add_parser('recreate_deployment')
@@ -394,6 +404,8 @@ def _parser():
     create.add_argument('--input', required=True)
     create.add_argument('--output', required=True)
     create.add_argument('--version', required=True)
+    create.add_argument('--skip-healthchecks',
+                        default=False, action='store_true')
     create.set_defaults(func=recreate_deployment)
 
     modify = subparsers.add_parser('modify_agents')
