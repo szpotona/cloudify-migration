@@ -1,5 +1,5 @@
 1.0.5 - 11.12.2015
-Added support for blueprint formats: tar, tar.bz2, zip.
+Added support for blueprint archive formats: tar, tar.bz2, zip.
 Fix problem with './' at the beginning of each path in blueprint archive.
 Note: All blueprints archives during migration are converted to tar.gz format.
 1.0.4 - 11.12.2015
