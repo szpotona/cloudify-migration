@@ -565,7 +565,7 @@ def migrate_blueprints(source_runner, target_runner, blueprints_to_skip,
             blueprints_path))
         blueprints = [b.id for b in target_runner.rest.blueprints.list()]
         for blueprint in os.listdir(blueprints_path):
-            blueprint_name = blueprint.split('.')[0]
+            blueprint_name = blueprint[:-len('.tar.gz')]
             if blueprint_name in blueprints_to_skip:
                 print "Skipping blueprint '{0}' (on list to skip)"\
                     .format(blueprint_name)
@@ -687,14 +687,21 @@ def _parser():
     migrate_p.add_argument('--logfile', required=True)
     migrate_p.add_argument('--deployment')
     migrate_p.add_argument('--skip-blueprints',
-                           default=False, action='store_true')
+                           default=False, action='store_true',
+                           help='Skip migration of blueprints')
     migrate_p.add_argument('--skip-deployments',
-                           default=False, action='store_true')
+                           default=False, action='store_true',
+                           help='Skip migration of deployments')
     migrate_p.add_argument('--skip-agents',
-                           default=False, action='store_true')
+                           default=False, action='store_true',
+                           help='Skip migration of agents')
     migrate_p.add_argument('--autofilter-blueprints',
                            default=False, action='store_true')
-    migrate_p.add_argument('--blueprints-to-skip')
+    migrate_p.add_argument('--blueprints-to-skip', metavar='FILE_PATH',
+                           help='Path to file providing in each line name of '
+                                'the blueprint to skip. Flag also skips '
+                                'deployments that are based on skipped '
+                                'blueprints')
     migrate_p.set_defaults(func=migrate)
 
     agent = subparsers.add_parser('agents')
