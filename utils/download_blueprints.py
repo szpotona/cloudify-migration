@@ -14,7 +14,7 @@ if blueprints:
         b_id = blueprint.id
         client.blueprints.download(
             b_id,
-            path.join(blueprints_dir, b_id + ".tar.gz")
+            path.join(blueprints_dir, b_id + '.tar.gz')
         )
 else:
     sys.stderr.write('No blueprints found on the Cloudify Manager.\n')
