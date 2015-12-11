@@ -14,6 +14,8 @@ import time
 import datetime
 import traceback
 
+from setuptools import archive_util
+
 from cloudify_rest_client.executions import Execution
 
 _DIRECTORY = os.path.dirname(os.path.realpath(__file__))
@@ -136,7 +138,6 @@ class CfyRunner(object):
             os.chdir(cwd)
 
 
-
 def _cfy_runner(ip):
     rest_client = report.get_rest_client(ip)
     version = rest_client.manager.get_version()['version']
@@ -158,18 +159,16 @@ def _upload_blueprint(blueprints_path, blueprint_arch, runner,
     if blueprint in old_blueprints:
         return
     blueprint_path = os.path.join(blueprints_path, blueprint)
-    call_arr(['mkdir', blueprint_path])
+
+    tf = tempfile.mkdtemp()
     try:
-        try:
-            call('tar zxf "{0}" -C "{1}" --strip-components 1'.format(
-                os.path.join(blueprints_path, blueprint_arch),
-                blueprint_path
-            ))
-        except Exception:
-            call('tar xf "{0}" -C "{1}" --strip-components 1'.format(
-                os.path.join(blueprints_path, blueprint_arch),
-                blueprint_path
-            ))
+        archive_util.unpack_archive(
+            os.path.join(blueprints_path, blueprint_arch),
+            tf
+        )
+        # blueprint archive has exactly one directory inside
+        shutil.move(os.path.join(tf, os.listdir(tf)[0]), blueprint_path)
+
         possible_blueprints = []
         for blueprint_file in os.listdir(blueprint_path):
             if blueprint_file.endswith('.yaml'):
@@ -204,6 +203,7 @@ def _upload_blueprint(blueprints_path, blueprint_arch, runner,
         runner.cfy_run(['blueprints', 'upload',  '-p',  os.path.join(blueprint_path, to_upload), '-b', blueprint])
     finally:
         shutil.rmtree(blueprint_path)
+        shutil.rmtree(tf)
 
 
 def install_code(handler, directory, config):
@@ -603,18 +603,16 @@ def _insert_blueprint_result(blueprint_arch, blueprints_path, results,
                              runner, config):
     blueprint = blueprint_arch[:-len('.tar.gz')]
     blueprint_path = os.path.join(blueprints_path, blueprint)
-    call_arr(['mkdir', blueprint_path])
+
+    tf = tempfile.mkdtemp()
     try:
-        try:
-            call('tar zxf "{0}" -C "{1}" --strip-components 1'.format(
-                os.path.join(blueprints_path, blueprint_arch),
-                blueprint_path
-            ))
-        except Exception:
-            call('tar xf "{0}" -C "{1}" --strip-components 1'.format(
-                os.path.join(blueprints_path, blueprint_arch),
-                blueprint_path
-            ))
+        archive_util.unpack_archive(
+            os.path.join(blueprints_path, blueprint_arch),
+            tf
+        )
+        # blueprint archive has exactly one directory inside
+        shutil.move(os.path.join(tf, os.listdir(tf)[0]), blueprint_path)
+
         possible_blueprints = []
         for blueprint_file in os.listdir(blueprint_path):
             if blueprint_file.endswith('.yaml'):
@@ -631,6 +629,7 @@ def _insert_blueprint_result(blueprint_arch, blueprints_path, results,
         }
     finally:
         shutil.rmtree(blueprint_path)
+        shutil.rmtree(tf)
 
 
 def analyze_blueprints(config):
