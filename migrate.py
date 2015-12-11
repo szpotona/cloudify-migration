@@ -445,7 +445,8 @@ def _migrate_deployment(deployment, existing_deployments,
         shutil.rmtree(deployment_path)
 
 
-def migrate_deployments(source_runner, target_runner, config):
+def migrate_deployments(source_runner, target_runner, blueprints_to_skip,
+                        config):
     print 'Installing code on source manager'
     install_code(source_runner.handler, _REMOTE_PATH, config)
     print 'Installing code on target manager'
@@ -458,6 +459,13 @@ def migrate_deployments(source_runner, target_runner, config):
     else:
         deployments = source_runner.rest.deployments.list()
     for deployment in deployments:
+        if deployment.blueprint_id in blueprints_to_skip:
+            _log_msg(
+                deployment.id,
+                "Skipping deployment because of skipped blueprint '{0}'"
+                .format(deployment.blueprint_id),
+                config.logfile)
+            continue
         _perform_migration(deployment, existing_deployments,
                            source_runner, target_runner, config.logfile,
                            config)
@@ -466,11 +474,14 @@ def migrate_deployments(source_runner, target_runner, config):
 def migrate(config):
     source_runner = _init_runner(config.source)
     target_runner = _init_runner(config.target)
+    blueprints_to_skip = _get_blueprints_to_skip(config.blueprints_to_skip)
     if not config.skip_blueprints:
-        migrate_blueprints(source_runner, target_runner, config)
+        migrate_blueprints(source_runner, target_runner,
+                           blueprints_to_skip, config)
     report.set_credentials(config)
     if not config.skip_deployments:
-        migrate_deployments(source_runner, target_runner, config)
+        migrate_deployments(source_runner, target_runner,
+                            blueprints_to_skip, config)
     else:
         print 'Skipping deployment migration'
 
@@ -532,7 +543,21 @@ def start_agents(config):
     ))
 
 
-def migrate_blueprints(source_runner, target_runner, config):
+def _get_blueprints_to_skip(bts_path):
+    if not bts_path:
+        return []
+
+    if not os.path.exists(bts_path):
+        raise RuntimeError("--blueprints-to-skip path '{0}' doesn't exist"
+                           .format(bts_path))
+
+    with open(bts_path, 'r') as f:
+        lines = f.readlines()
+        return map(str.strip, lines)
+
+
+def migrate_blueprints(source_runner, target_runner, blueprints_to_skip,
+                       config):
     blueprints_path = tempfile.mkdtemp(prefix='blueprints_dir')
     try:
         source_runner.python_run('{0} {1}'.format(
@@ -540,6 +565,11 @@ def migrate_blueprints(source_runner, target_runner, config):
             blueprints_path))
         blueprints = [b.id for b in target_runner.rest.blueprints.list()]
         for blueprint in os.listdir(blueprints_path):
+            blueprint_name = blueprint[:-len('.tar.gz')]
+            if blueprint_name in blueprints_to_skip:
+                print "Skipping blueprint '{0}' (on list to skip)"\
+                    .format(blueprint_name)
+                continue
             _upload_blueprint(blueprints_path, blueprint, target_runner,
                               blueprints, config, source_runner)
     finally:
@@ -657,13 +687,21 @@ def _parser():
     migrate_p.add_argument('--logfile', required=True)
     migrate_p.add_argument('--deployment')
     migrate_p.add_argument('--skip-blueprints',
-                           default=False, action='store_true')
+                           default=False, action='store_true',
+                           help='Skip migration of blueprints')
     migrate_p.add_argument('--skip-deployments',
-                           default=False, action='store_true')
+                           default=False, action='store_true',
+                           help='Skip migration of deployments')
     migrate_p.add_argument('--skip-agents',
-                           default=False, action='store_true')
+                           default=False, action='store_true',
+                           help='Skip migration of agents')
     migrate_p.add_argument('--autofilter-blueprints',
                            default=False, action='store_true')
+    migrate_p.add_argument('--blueprints-to-skip', metavar='FILE_PATH',
+                           help='Path to file providing in each line name of '
+                                'the blueprint to skip. Flag also skips '
+                                'deployments that are based on skipped '
+                                'blueprints')
     migrate_p.set_defaults(func=migrate)
 
     agent = subparsers.add_parser('agents')
