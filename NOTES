@@ -1,6 +1,7 @@
 1.0.5 - 11.12.2015
 Added support for blueprint formats: tar, tar.bz2, zip.
 Fix problem with './' at the beginning of each path in blueprint archive.
+Note: All blueprints archives during migration are converted to tar.gz format.
 1.0.4 - 11.12.2015
 Added --blueprints-to-skip flag to migrate subcommand.
 1.0.3 - 03.12.2015
