@@ -1,13 +1,18 @@
+1.0.6 - 14.12.2015
+    Fix automatic conversion of blueprints archives to .tar.gz. Now we preserve
+    original archive type.
+    Fix automatic changing of application name in blueprints archives to
+    blueprints name. Now original application name is preserved.
 1.0.5 - 11.12.2015
-Added support for blueprint archive formats: tar, tar.bz2, zip.
-Fix problem with './' at the beginning of each path in blueprint archive.
-Note: All blueprints archives during migration are converted to tar.gz format.
+    Added support for blueprint archive formats: tar, tar.bz2, zip.
+    Fix problem with './' at the beginning of each path in blueprint archive.
+    Note: All blueprints archives during migration are converted to tar.gz format.
 1.0.4 - 11.12.2015
-Added --blueprints-to-skip flag to migrate subcommand.
+    Added --blueprints-to-skip flag to migrate subcommand.
 1.0.3 - 03.12.2015
-Added --skip-agents flag to migrate subcommand.
+    Added --skip-agents flag to migrate subcommand.
 1.0.2 - 02.12.2015
-Added --autofilter-blueprints flag to both migrate and analyze_blueprints subcommands.
-Added --skip-deployments flag to migrate subcommand.
+    Added --autofilter-blueprints flag to both migrate and analyze_blueprints subcommands.
+    Added --skip-deployments flag to migrate subcommand.
 1.0.1 - 01.12.2015
-Added analyze_blueprints subcommand to migrate.py
+    Added analyze_blueprints subcommand to migrate.py

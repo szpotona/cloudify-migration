@@ -155,7 +155,7 @@ def _init_runner(ip):
 
 def _upload_blueprint(blueprints_path, blueprint_arch, runner,
                       old_blueprints, config, source_runner):
-    blueprint = blueprint_arch[:-len('.tar.gz')]
+    blueprint = _get_blueprint_name_from_file(blueprint_arch)
     if blueprint in old_blueprints:
         return
     blueprint_path = os.path.join(blueprints_path, blueprint)
@@ -200,7 +200,10 @@ def _upload_blueprint(blueprints_path, blueprint_arch, runner,
                                      'this blueprint? [y/n] ')
                     if skip == 'y':
                         return
-        runner.cfy_run(['blueprints', 'upload',  '-p',  os.path.join(blueprint_path, to_upload), '-b', blueprint])
+        runner.cfy_run(['blueprints', 'publish-archive',
+                        '-l', os.path.join(blueprints_path, blueprint_arch),
+                        '-b', blueprint,
+                        '-n', to_upload])
     finally:
         shutil.rmtree(blueprint_path)
         shutil.rmtree(tf)
@@ -556,6 +559,19 @@ def _get_blueprints_to_skip(bts_path):
         return map(str.strip, lines)
 
 
+def _get_blueprint_name_from_file(filename):
+    """
+    We support blueprints archive types: .tar, .tar.gz, .tar.bz2, .zip.
+
+    :param filename: blueprint archive file name
+    :return: blueprint name
+    """
+    name, _ = os.path.splitext(filename)
+    if name.endswith('.tar'):
+        name, _ = os.path.splitext(name)
+    return name
+
+
 def migrate_blueprints(source_runner, target_runner, blueprints_to_skip,
                        config):
     blueprints_path = tempfile.mkdtemp(prefix='blueprints_dir')
@@ -565,7 +581,7 @@ def migrate_blueprints(source_runner, target_runner, blueprints_to_skip,
             blueprints_path))
         blueprints = [b.id for b in target_runner.rest.blueprints.list()]
         for blueprint in os.listdir(blueprints_path):
-            blueprint_name = blueprint[:-len('.tar.gz')]
+            blueprint_name = _get_blueprint_name_from_file(blueprint)
             if blueprint_name in blueprints_to_skip:
                 print "Skipping blueprint '{0}' (on list to skip)"\
                     .format(blueprint_name)
@@ -601,7 +617,7 @@ def _filter_possible_blueprint_files(blueprint_name, possible_blueprints,
 
 def _insert_blueprint_result(blueprint_arch, blueprints_path, results,
                              runner, config):
-    blueprint = blueprint_arch[:-len('.tar.gz')]
+    blueprint = _get_blueprint_name_from_file(blueprint_arch)
     blueprint_path = os.path.join(blueprints_path, blueprint)
 
     tf = tempfile.mkdtemp()
