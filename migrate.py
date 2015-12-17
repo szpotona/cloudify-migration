@@ -199,41 +199,43 @@ def _upload_blueprint(blueprints_path, blueprint_arch, runner,
                     skip = raw_input('No file chosen, do you want to skip '
                                      'this blueprint? [y/n] ')
                     if skip == 'y':
+                        shutil.rmtree(blueprint_path)
                         return
+
         runner.cfy_run(['blueprints', 'publish-archive',
                         '-l', os.path.join(blueprints_path, blueprint_arch),
                         '-b', blueprint,
                         '-n', to_upload])
-    finally:
         shutil.rmtree(blueprint_path)
+    finally:
         shutil.rmtree(tf)
 
 
 def install_code(handler, directory, config):
     path = tempfile.mkdtemp()
-    try:
-        conf = _json_load(config.config)
-        auth_path = conf.get('deployments_auth_override_path')
-        if auth_path:
-            auth = _json_load(auth_path)
-        else:
-            auth = {}
-        with open(os.path.join(_DIRECTORY, 'remote', 'auth.json'), 'w') as f:
-            f.write(json.dumps(auth))
-        arch_path = os.path.join(path, 'arch.tar.gz')
-        call('cp -rf {0}/healthcheck {0}/remote'.format(_DIRECTORY))
-        call('cp {0} {1}/remote/config.json'.format(config.config, _DIRECTORY))
-        call('bash -c "chmod +x {0}/remote/*.sh"'.format(_DIRECTORY))
-        call(
-            'bash -c "cd {1}/remote ; tar -cf {0} *;"'.format(arch_path, _DIRECTORY))
-        call('rm -rf {0}/remote/healthcheck'.format(_DIRECTORY))
-        call('rm {0}/remote/config.json {0}/remote/auth.json'.format(_DIRECTORY))
-        handler.execute('mkdir -p {0}'.format(directory))
-        handler.send_file(arch_path, directory)
-        handler.execute('tar xf {0} -C {1} && cd {1} && mkdir -p tmp'.format(
-            os.path.join(directory, 'arch.tar.gz'), directory))
-    finally:
-        shutil.rmtree(path)
+
+    conf = _json_load(config.config)
+    auth_path = conf.get('deployments_auth_override_path')
+    if auth_path:
+        auth = _json_load(auth_path)
+    else:
+        auth = {}
+    with open(os.path.join(_DIRECTORY, 'remote', 'auth.json'), 'w') as f:
+        f.write(json.dumps(auth))
+    arch_path = os.path.join(path, 'arch.tar.gz')
+    call('cp -rf {0}/healthcheck {0}/remote'.format(_DIRECTORY))
+    call('cp {0} {1}/remote/config.json'.format(config.config, _DIRECTORY))
+    call('bash -c "chmod +x {0}/remote/*.sh"'.format(_DIRECTORY))
+    call(
+        'bash -c "cd {1}/remote ; tar -cf {0} *;"'.format(arch_path, _DIRECTORY))
+    call('rm -rf {0}/remote/healthcheck'.format(_DIRECTORY))
+    call('rm {0}/remote/config.json {0}/remote/auth.json'.format(_DIRECTORY))
+    handler.execute('mkdir -p {0}'.format(directory))
+    handler.send_file(arch_path, directory)
+    handler.execute('tar xf {0} -C {1} && cd {1} && mkdir -p tmp'.format(
+        os.path.join(directory, 'arch.tar.gz'), directory))
+
+    shutil.rmtree(path)
 
 _REMOTE_PATH = 'migration'
 _REMOTE_TMP = os.path.join(_REMOTE_PATH, 'tmp')
@@ -319,7 +321,9 @@ def _migrate_deployment(deployment, existing_deployments,
     phase = 'starting'
     error = ''
     deployment_path = tempfile.mkdtemp(
-        prefix='deployment_dir_{0}'.format(deployment.id))
+        prefix='deployment_dir_{0}'.format(deployment.id)
+    )
+    to_clean = True
     try:
         print 'Deployment {0}:'.format(deployment.id)
         if deployment.id in existing_deployments:
@@ -378,7 +382,7 @@ def _migrate_deployment(deployment, existing_deployments,
         target_runner.handler.send_file(
             res_path, os.path.join(_REMOTE_TMP, archname))
         recreate_result = str(uuid.uuid4())
-        script_recreate_result = target_runner.handler.container_path(
+        target_runner.handler.container_path(
             _REMOTE_TMP, recreate_result)
         print 'Restoring deployment runtime data...'
         target_runner.handler.python_call(('{0} recreate_deployment --deployment {1} --input {2}'
@@ -442,10 +446,14 @@ def _migrate_deployment(deployment, existing_deployments,
             print 'Post agent install healtcheck for deployment {0} succeeded'.format(deployment.id)
         print 'Deployment {0} migrated.'.format(deployment.id)
         phase = 'deployment_migrated'
+    except:
+        to_clean = False
+        raise
     finally:
         result['phase'] = phase
         result['error'] = error
-        shutil.rmtree(deployment_path)
+        if to_clean:
+            shutil.rmtree(deployment_path)
 
 
 def migrate_deployments(source_runner, target_runner, blueprints_to_skip,
@@ -457,8 +465,7 @@ def migrate_deployments(source_runner, target_runner, blueprints_to_skip,
     existing_deployments = [d.id for d in
                             target_runner.rest.deployments.list()]
     if config.deployment:
-        deployments = [
-            source_runner.rest.deployments.get(config.deployment)]
+        deployments = [source_runner.rest.deployments.get(config.deployment)]
     else:
         deployments = source_runner.rest.deployments.list()
     for deployment in deployments:
@@ -575,21 +582,21 @@ def _get_blueprint_name_from_file(filename):
 def migrate_blueprints(source_runner, target_runner, blueprints_to_skip,
                        config):
     blueprints_path = tempfile.mkdtemp(prefix='blueprints_dir')
-    try:
-        source_runner.python_run('{0} {1}'.format(
-            os.path.join(_DIRECTORY, 'utils', 'download_blueprints.py'),
-            blueprints_path))
-        blueprints = [b.id for b in target_runner.rest.blueprints.list()]
-        for blueprint in os.listdir(blueprints_path):
-            blueprint_name = _get_blueprint_name_from_file(blueprint)
-            if blueprint_name in blueprints_to_skip:
-                print "Skipping blueprint '{0}' (on list to skip)"\
-                    .format(blueprint_name)
-                continue
-            _upload_blueprint(blueprints_path, blueprint, target_runner,
-                              blueprints, config, source_runner)
-    finally:
-        shutil.rmtree(blueprints_path)
+
+    source_runner.python_run('{0} {1}'.format(
+        os.path.join(_DIRECTORY, 'utils', 'download_blueprints.py'),
+        blueprints_path))
+    blueprints = [b.id for b in target_runner.rest.blueprints.list()]
+    for blueprint in os.listdir(blueprints_path):
+        blueprint_name = _get_blueprint_name_from_file(blueprint)
+        if blueprint_name in blueprints_to_skip:
+            print "Skipping blueprint '{0}' (on list to skip)"\
+                .format(blueprint_name)
+            continue
+        _upload_blueprint(blueprints_path, blueprint, target_runner,
+                          blueprints, config, source_runner)
+
+    shutil.rmtree(blueprints_path)
 
 
 def _filter_possible_blueprint_files(blueprint_name, possible_blueprints,
@@ -601,17 +608,18 @@ def _filter_possible_blueprint_files(blueprint_name, possible_blueprints,
     for blueprint in possible_blueprints:
         print 'Checking candidate {0}'.format(blueprint)
         _, path = tempfile.mkstemp()
-        try:
-            runner.python_run_arr([
-                os.path.join(_DIRECTORY, 'utils', 'list_node_names.py'),
-                os.path.join(blueprint_path, blueprint),
-                path
-            ])
-            nodes = _json_load(path)
-            if nodes['ok'] and set(nodes['nodes']) == expected_nodes:
-                result.append(blueprint)
-        finally:
-            os.remove(path)
+
+        runner.python_run_arr([
+            os.path.join(_DIRECTORY, 'utils', 'list_node_names.py'),
+            os.path.join(blueprint_path, blueprint),
+            path
+        ])
+        nodes = _json_load(path)
+        if nodes['ok'] and set(nodes['nodes']) == expected_nodes:
+            result.append(blueprint)
+
+        os.remove(path)
+
     return result
 
 
@@ -643,8 +651,9 @@ def _insert_blueprint_result(blueprint_arch, blueprints_path, results,
         results[blueprint] = {
             'possible_files': possible_blueprints
         }
-    finally:
+
         shutil.rmtree(blueprint_path)
+    finally:
         shutil.rmtree(tf)
 
 
@@ -652,41 +661,41 @@ def analyze_blueprints(config):
     runner = _init_runner(config.manager_ip)
     report.set_credentials(config)
     blueprints_path = tempfile.mkdtemp(prefix='blueprints_dir')
-    try:
-        runner.python_run('{0} {1}'.format(
-            os.path.join(_DIRECTORY, 'utils', 'download_blueprints.py'),
-            blueprints_path))
-        blueprints_results = {}
-        for blueprint in os.listdir(blueprints_path):
-            _insert_blueprint_result(blueprint, blueprints_path,
-                                     blueprints_results, runner, config)
-        multi_yaml = 0
-        single_yaml = 0
+
+    runner.python_run('{0} {1}'.format(
+        os.path.join(_DIRECTORY, 'utils', 'download_blueprints.py'),
+        blueprints_path))
+    blueprints_results = {}
+    for blueprint in os.listdir(blueprints_path):
+        _insert_blueprint_result(blueprint, blueprints_path,
+                                 blueprints_results, runner, config)
+    multi_yaml = 0
+    single_yaml = 0
+    for k, vals in blueprints_results.iteritems():
+        if len(vals['possible_files']) > 1:
+            multi_yaml += 1
+        elif len(vals['possible_files']) == 1:
+            single_yaml += 1
+        else:
+            raise RuntimeError(
+                'Blueprint {0} does not contain yaml file'.format(k))
+    res = {
+        'single_yaml': single_yaml,
+        'multi_yaml': multi_yaml,
+        'blueprints': blueprints_results
+    }
+    _json_dump(config.output, res)
+    with open(config.csv_output, 'w') as f:
+        f.write('blueprint,files\n')
         for k, vals in blueprints_results.iteritems():
             if len(vals['possible_files']) > 1:
-                multi_yaml += 1
-            elif len(vals['possible_files']) == 1:
-                single_yaml += 1
-            else:
-                raise RuntimeError(
-                    'Blueprint {0} does not contain yaml file'.format(k))
-        res = {
-            'single_yaml': single_yaml,
-            'multi_yaml': multi_yaml,
-            'blueprints': blueprints_results
-        }
-        _json_dump(config.output, res)
-        with open(config.csv_output, 'w') as f:
-            f.write('blueprint,files\n')
-            for k, vals in blueprints_results.iteritems():
-                if len(vals['possible_files']) > 1:
-                    files = [k] + vals['possible_files']
-                    f.write('{0}\n'.format(','.join(files)))
-        print 'Summary:'
-        print 'Blueprints with multiple yaml files: {0}'.format(multi_yaml)
-        print 'Blueprints with single yaml file: {0}'.format(single_yaml)
-    finally:
-        shutil.rmtree(blueprints_path)
+                files = [k] + vals['possible_files']
+                f.write('{0}\n'.format(','.join(files)))
+    print 'Summary:'
+    print 'Blueprints with multiple yaml files: {0}'.format(multi_yaml)
+    print 'Blueprints with single yaml file: {0}'.format(single_yaml)
+
+    shutil.rmtree(blueprints_path)
 
 
 def _parser():
