@@ -22,7 +22,7 @@ def main(args):
         else:
             result['ok'] = True
             result['nodes'] = [n['name'] for n in blueprint['nodes']]
-    except (DSLParsingException, yaml.scanner.ScannerError):
+    except (DSLParsingException, yaml.scanner.ScannerError, TypeError):
         result['ok'] = False
     _json_dump(result_path, result)
 
