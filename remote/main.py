@@ -91,6 +91,7 @@ def healthcheck(deployment_id, version, assert_vms_agents_alive=True,
     vms_accessible = report.all_vms_accessible(result)
     if not vms_accessible:
         result[_HEALTHCHECK_FAILED] = 'vm_not_accessible'
+    result['id'] = deployment_id
     return result
 
 

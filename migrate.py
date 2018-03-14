@@ -17,6 +17,7 @@ import traceback
 from setuptools import archive_util
 
 from cloudify_rest_client.executions import Execution
+from cloudify_rest_client import CloudifyClient
 
 _DIRECTORY = os.path.dirname(os.path.realpath(__file__))
 
@@ -520,20 +521,31 @@ def perform_healthcheck(config):
     filename = str(uuid.uuid4())
     print 'Running healtcheck'
     report_path = runner.handler.container_path(_REMOTE_TMP, filename)
-    runner.handler.python_call('{0} healthcheck --deployment {1} --version {2} --output {3}'.format(
-        runner.handler.container_path(_REMOTE_PATH, 'main.py'),
-        config.deployment,
-        runner.version,
-        report_path
-    ))
-    _, res_path = tempfile.mkstemp()
-    print 'Loading results'
-    runner.handler.load_file('~/{0}/{1}'.format(_REMOTE_TMP, filename),
-                             res_path)
+
+    deployments = config.deployment
+    if config.all:
+        mgr = CloudifyClient(config.manager_ip)
+        ds = mgr.deployments.list()
+        deployments = [d['id'] for d in ds]
+
+    results = {}
+    for deployment in deployments:
+        runner.handler.python_call('{0} healthcheck --deployment {1} --version {2} --output {3}'.format(
+            runner.handler.container_path(_REMOTE_PATH, 'main.py'),
+            deployment,
+            runner.version,
+            report_path
+        ))
+        _, res_path = tempfile.mkstemp()
+        print 'Loading results'
+        runner.handler.load_file('~/{0}/{1}'.format(_REMOTE_TMP, filename),
+                                 res_path)
+        with open(res_path) as f:
+            rep = json.loads(f.read())
+            results[rep['id']] = rep
+        os.remove(res_path)
     print 'Results:'
-    with open(res_path) as f:
-        print f.read()
-    os.remove(res_path)
+    print results
 
 
 def start_agents(config):
@@ -738,6 +750,7 @@ def _parser():
 
     healthcheck_p = subparsers.add_parser('healthcheck')
     healthcheck_p.add_argument('--deployment', required=True)
+    healthcheck_p.add_argument('--all', action='store_true')
     healthcheck_p.add_argument('--manager_ip', required=True)
     healthcheck_p.add_argument('--config', required=True)
     healthcheck_p.set_defaults(func=perform_healthcheck)
