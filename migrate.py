@@ -524,7 +524,8 @@ def perform_healthcheck(config):
     install_code(runner.handler, remote_path, config)
     filename = str(uuid.uuid4())
     print 'Running healtcheck'
-    report_path = runner.handler.container_path(remote_tmp, filename)
+    report_path = runner.handler.container_path(os.path.join(_REMOTE_PATH, 'tmp'),
+                                                filename)
 
     deployments = config.deployment
     if config.all:
@@ -535,15 +536,14 @@ def perform_healthcheck(config):
     results = {}
     for deployment in deployments:
         runner.handler.python_call('{0} healthcheck --deployment {1} --version {2} --output {3}'.format(
-            runner.handler.container_path(remote_path, 'main.py'),
+            runner.handler.container_path(_REMOTE_PATH, 'main.py'),
             deployment,
             runner.version,
             report_path
         ))
         _, res_path = tempfile.mkstemp()
         print 'Loading results'
-        runner.handler.load_file('~/{0}/{1}'.format(remote_tmp,
-                                                    filename),
+        runner.handler.load_file('{0}/{1}'.format(remote_tmp, filename),
                                  res_path)
         with open(res_path) as f:
             rep = json.loads(f.read())
