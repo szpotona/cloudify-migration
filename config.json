@@ -7,5 +7,6 @@
   "windows_password": "",
   "unix_username": "",
   "unix_keypath": "~/.ssh/_agent_key_lol.pem",
-  "deployments_auth_override_path": ""
+  "deployments_auth_override_path": "",
+  "manager_home": "/home/ubuntu"
 }

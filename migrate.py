@@ -147,10 +147,10 @@ def _cfy_runner(ip):
 
 def _init_runner(ip):
     runner = _cfy_runner(ip)
-    runner.mkdir()
-    runner.cfy_run(['init', '-r'])
-    runner.cfy_run(['use', '-t', ip])
-    runner.cfy_run(['status'])
+    # runner.mkdir()
+    # runner.cfy_run(['init', '-r'])
+    # runner.cfy_run(['use', '-t', ip])
+    # runner.cfy_run(['status'])
     return runner
 
 
@@ -519,10 +519,12 @@ def perform_healthcheck(config):
     manager_ip = conf['manager_ip']
     runner = _init_runner(manager_ip)
     print 'Installing required code'
-    install_code(runner.handler, _REMOTE_PATH, config)
+    remote_path = os.path.join(conf['manager_home'], _REMOTE_PATH)
+    remote_tmp = os.path.join(remote_path, 'tmp')
+    install_code(runner.handler, remote_path, config)
     filename = str(uuid.uuid4())
     print 'Running healtcheck'
-    report_path = runner.handler.container_path(_REMOTE_TMP, filename)
+    report_path = runner.handler.container_path(remote_tmp, filename)
 
     deployments = config.deployment
     if config.all:
@@ -533,14 +535,15 @@ def perform_healthcheck(config):
     results = {}
     for deployment in deployments:
         runner.handler.python_call('{0} healthcheck --deployment {1} --version {2} --output {3}'.format(
-            runner.handler.container_path(_REMOTE_PATH, 'main.py'),
+            runner.handler.container_path(remote_path, 'main.py'),
             deployment,
             runner.version,
             report_path
         ))
         _, res_path = tempfile.mkstemp()
         print 'Loading results'
-        runner.handler.load_file('~/{0}/{1}'.format(_REMOTE_TMP, filename),
+        runner.handler.load_file('~/{0}/{1}'.format(remote_tmp,
+                                                    filename),
                                  res_path)
         with open(res_path) as f:
             rep = json.loads(f.read())
