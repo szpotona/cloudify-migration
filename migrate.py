@@ -515,7 +515,9 @@ def perform_cleanup(config):
 
 def perform_healthcheck(config):
     report.set_credentials(config)
-    runner = _init_runner(config.manager_ip)
+    conf = _json_load(config.config)
+    manager_ip = conf['manager_ip']
+    runner = _init_runner(manager_ip)
     print 'Installing required code'
     install_code(runner.handler, _REMOTE_PATH, config)
     filename = str(uuid.uuid4())
@@ -524,7 +526,7 @@ def perform_healthcheck(config):
 
     deployments = config.deployment
     if config.all:
-        mgr = CloudifyClient(config.manager_ip)
+        mgr = CloudifyClient(manager_ip)
         ds = mgr.deployments.list()
         deployments = [d['id'] for d in ds]
 
@@ -544,8 +546,10 @@ def perform_healthcheck(config):
             rep = json.loads(f.read())
             results[rep['id']] = rep
         os.remove(res_path)
-    print 'Results:'
-    print results
+    report_path = 'manager_{}.json'.format(manager_ip)
+    print 'Results: {}'.format(report_path)
+    with open(report_path, 'w') as f:
+        f.write(json.dumps(results))
 
 
 def start_agents(config):
@@ -731,38 +735,18 @@ def _parser():
                                 'blueprints')
     migrate_p.set_defaults(func=migrate)
 
-    agent = subparsers.add_parser('agents')
-    agent.add_argument('--deployment', required=True)
-    agent.add_argument('--manager_ip', required=True)
-    agent.add_argument('--operation', required=True)
-    agent.add_argument('--config', required=True)
-    agent.set_defaults(func=modify_agents)
-
-    agent = subparsers.add_parser('start_agents')
-    agent.add_argument('--manager_ip', required=True)
-    agent.add_argument('--config', required=True)
-    agent.set_defaults(func=start_agents)
-
     cleanup = subparsers.add_parser('cleanup')
     cleanup.add_argument('--manager_ip', required=True)
     cleanup.add_argument('--config', required=True)
     cleanup.set_defaults(func=perform_cleanup)
 
     healthcheck_p = subparsers.add_parser('healthcheck')
-    healthcheck_p.add_argument('--deployment', required=True)
+    healthcheck_p.add_argument('--deployment')
     healthcheck_p.add_argument('--all', action='store_true')
-    healthcheck_p.add_argument('--manager_ip', required=True)
+    healthcheck_p.add_argument('--manager_ip')
     healthcheck_p.add_argument('--config', required=True)
     healthcheck_p.set_defaults(func=perform_healthcheck)
 
-    analyzer = subparsers.add_parser('analyze_blueprints')
-    analyzer.add_argument('--manager_ip', required=True)
-    analyzer.add_argument('--config', required=True)
-    analyzer.add_argument('--output', required=True)
-    analyzer.add_argument('--csv_output', required=True)
-    analyzer.add_argument('--autofilter-blueprints',
-                           default=False, action='store_true')
-    analyzer.set_defaults(func=analyze_blueprints)
     return parser
 
 

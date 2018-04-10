@@ -69,6 +69,7 @@ def healthcheck(deployment_id, version, assert_vms_agents_alive=True,
                 check_vms_access=True, skip_env_healthchecks=False):
     client = CloudifyClient()
     result = get_deployment_state(deployment_id, client)
+    result['id'] = deployment_id
     if not result['ok']:
         result[_HEALTHCHECK_FAILED] = 'wrong_state'
         return result
@@ -91,7 +92,6 @@ def healthcheck(deployment_id, version, assert_vms_agents_alive=True,
     vms_accessible = report.all_vms_accessible(result)
     if not vms_accessible:
         result[_HEALTHCHECK_FAILED] = 'vm_not_accessible'
-    result['id'] = deployment_id
     return result
 
 
