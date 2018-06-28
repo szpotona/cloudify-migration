@@ -516,7 +516,7 @@ def perform_cleanup(config):
 def perform_healthcheck(config):
     report.set_credentials(config)
     conf = _json_load(config.config)
-    manager_ip = conf['manager_ip']
+    manager_ip = config.manager_ip
     runner = _init_runner(manager_ip)
     print 'Installing required code'
     remote_path = os.path.join(conf['manager_home'], _REMOTE_PATH)
@@ -527,32 +527,39 @@ def perform_healthcheck(config):
     report_path = runner.handler.container_path(os.path.join(_REMOTE_PATH, 'tmp'),
                                                 filename)
 
-    deployments = config.deployment
+    deployments = [config.deployment]
     if config.all:
         mgr = CloudifyClient(manager_ip)
         ds = mgr.deployments.list()
         deployments = [d['id'] for d in ds]
 
     results = {}
-    for deployment in deployments:
-        runner.handler.python_call('{0} healthcheck --deployment {1} --version {2} --output {3}'.format(
-            runner.handler.container_path(_REMOTE_PATH, 'main.py'),
-            deployment,
-            runner.version,
-            report_path
-        ))
-        _, res_path = tempfile.mkstemp()
-        print 'Loading results'
-        runner.handler.load_file('{0}/{1}'.format(remote_tmp, filename),
-                                 res_path)
-        with open(res_path) as f:
-            rep = json.loads(f.read())
-            results[rep['id']] = rep
-        os.remove(res_path)
-    report_path = 'manager_{}.json'.format(manager_ip)
-    print 'Results: {}'.format(report_path)
-    with open(report_path, 'w') as f:
-        f.write(json.dumps(results))
+    try:
+        for deployment in deployments:
+            try:
+                runner.handler.python_call('{0} healthcheck --deployment {1} --version {2} --output {3}'.format(
+                    runner.handler.container_path(_REMOTE_PATH, 'main.py'),
+                    deployment,
+                    runner.version,
+                    report_path
+                ))
+                _, res_path = tempfile.mkstemp()
+                print 'Loading results'
+                runner.handler.load_file('{0}/{1}'.format(remote_tmp, filename),
+                                         res_path)
+                with open(res_path) as f:
+                    rep = json.loads(f.read())
+                    results[rep['id']] = rep
+                os.remove(res_path)
+            except RuntimeError:
+                print "Error happened on deployment: %s" % deployment
+                results[deployment] = {"status": "failure"}
+    finally:
+        print "Done %d out of %d" % (len(results.keys()), len(deployments))
+        report_path = 'manager_{}.json'.format(manager_ip)
+        print 'Results: {}'.format(report_path)
+        with open(report_path, 'w') as f:
+            f.write(json.dumps(results))
 
 
 def start_agents(config):

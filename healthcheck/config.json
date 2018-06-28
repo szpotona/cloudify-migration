@@ -4,6 +4,7 @@
   "manager_key": "",
   "windows_username": "",
   "windows_password": "",
+  "manager_home":"/home/ubuntu",
   "unix_username": "",
   "unix_keypath": "",
   "deployments_auth_override_path": ""
